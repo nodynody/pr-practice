@@ -273,6 +273,16 @@
     padding:9px 18px; border-radius:4px; font-size:13px; opacity:0; transition:.22s; pointer-events:none; z-index:60;}
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
+  /* ===== 배경음악 컨트롤 ===== */
+  .bgm-ctrl{position:fixed; top:8px; right:8px; z-index:120; display:flex; align-items:center; gap:6px;
+    background:rgba(22,6,6,.82); border:2px solid var(--gold-dk); border-radius:999px; padding:4px 12px 4px 8px;
+    box-shadow:0 2px 8px rgba(0,0,0,.4);}
+  .bgm-ctrl button{background:none; border:none; cursor:pointer; font-size:19px; line-height:1; padding:0;}
+  .bgm-ctrl input[type=range]{width:86px; accent-color:var(--gold); cursor:pointer;}
+
+  /* 몬스터(동아리 학생·서예 선생님) 초상 */
+  .ev-foe svg{height:132px; width:auto; display:block;}
+
   /* ===== 반응형: 태블릿 / 스마트폰 (base 규칙보다 뒤에 두어 우선 적용) ===== */
   @media(max-width:900px){
     .menu .mi{font-size:13px; padding:8px 10px;}
@@ -292,6 +302,8 @@
     .event-box{padding:10px;}
     .ev-btn{padding:10px 14px; font-size:13px;}
     .srow .lab{font-size:10.5px;}
+    .bgm-ctrl{top:6px; right:6px; padding:3px 10px 3px 7px;}
+    .bgm-ctrl input[type=range]{width:60px;}
   }
   @media(hover:none){
     /* 터치 기기: 버튼 크게, 설명은 항상 보이도록 */
@@ -368,6 +380,11 @@
 
 <div class="toast" id="toast"></div>
 
+<div id="bgmCtrl" class="bgm-ctrl">
+  <button id="bgmBtn" aria-label="배경음악 켜기/끄기">🔊</button>
+  <input type="range" id="bgmVol" min="0" max="100" value="40" aria-label="배경음악 음량" />
+</div>
+
 <script>
 /* =========================================================
    갸루 메이커 (프린세스 메이커 2 스타일 UI)
@@ -376,6 +393,62 @@ const MAX_MONTH=24, BASE_YEAR=2026, START_AGE=16;
 const clamp=(v,mn=0,mx=100)=>Math.max(mn,Math.min(mx,v));
 const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 const won=n=>n.toLocaleString('ko-KR');
+
+/* =========================================================
+   배경음악 (Web Audio로 직접 합성 · 작곡한 7개 루프 + 드럼)
+   ========================================================= */
+const NF={A2:110.00,B2:123.47,C3:130.81,D3:146.83,E3:164.81,F3:174.61,G3:196.00,A3:220.00,B3:246.94,
+  C4:261.63,D4:293.66,E4:329.63,F4:349.23,G4:392.00,A4:440.00,B4:493.88,
+  C5:523.25,D5:587.33,E5:659.25,F5:698.46,G5:783.99,A5:880.00,B5:987.77,C6:1046.50,R:0};
+const TRACKS={
+  main:{bpm:108,wave:'triangle',mel:"E4 G4 C5 G4 A4 C5 E5 C5 D5 B4 G4 D5 C5 G4 E4 R",bass:"C3 C3 A2 A2 F3 F3 G3 G3"},
+  work:{bpm:126,wave:'square',mel:"C5 E5 G5 E5 C5 E5 A4 C5 F5 A4 F5 A4 G4 B4 D5 R",bass:"C3 G3 C3 G3 F3 C3 G3 G3"},
+  cute:{bpm:116,wave:'triangle',mel:"C5 E5 A5 E5 F5 A5 G5 E5 D5 F5 A5 F5 E5 C5 D5 R",bass:"F3 A3 C3 A3 F3 G3 C3 G3"},
+  calm:{bpm:94,wave:'sine',mel:"C5 R E5 R G4 A4 G4 R E5 R D5 R C5 R G4 R",bass:"C3 A2 F3 G3 C3 A2 F3 G3"},
+  party:{bpm:132,wave:'sawtooth',mel:"A4 C5 E5 C5 A4 C5 D5 C5 E5 C5 A4 C5 G4 B4 D5 R",bass:"A2 A2 F3 F3 C3 C3 G3 G3"},
+  battle:{bpm:142,wave:'square',mel:"A4 A4 C5 A4 B4 A4 G4 A4 E5 D5 C5 B4 A4 B4 C5 R",bass:"A2 A2 A2 A2 F3 F3 G3 G3"},
+  idol:{bpm:122,wave:'square',mel:"G5 E5 C5 E5 G5 C6 A5 G5 F5 A5 G5 E5 D5 E5 C5 R",bass:"C3 C3 G3 G3 A3 A3 F3 G3"}
+};
+const CAT_THEME={work:'work',beauty:'cute',train:'calm',play:'party'};
+function themeForAct(a){ for(const c in ACTIONS){ if(ACTIONS[c].some(x=>x.id===a.id)) return CAT_THEME[c]; } return 'main'; }
+const BGM={
+  ctx:null, master:null, filt:null, cur:null, playing:false, timer:null, vol:0.4, muted:false,
+  _ok(){ return typeof window!=='undefined' && (window.AudioContext||window.webkitAudioContext); },
+  init(){ if(this.ctx||!this._ok())return; try{
+      const AC=window.AudioContext||window.webkitAudioContext; this.ctx=new AC();
+      this.master=this.ctx.createGain(); this.master.gain.value=this.muted?0:this.vol;
+      this.filt=this.ctx.createBiquadFilter(); this.filt.type='lowpass'; this.filt.frequency.value=3600;
+      this.master.connect(this.filt); this.filt.connect(this.ctx.destination);
+    }catch(e){ this.ctx=null; } },
+  setVol(v){ this.vol=v; if(this.master&&!this.muted) this.master.gain.value=v; },
+  toggle(){ this.muted=!this.muted; if(this.master) this.master.gain.value=this.muted?0:this.vol; return !this.muted; },
+  play(name){ if(!this._ok())return; this.init(); if(!this.ctx)return;
+    if(this.ctx.state==='suspended') this.ctx.resume();
+    if(this.cur===name&&this.playing) return;
+    this.cur=name; if(!this.playing){ this.playing=true; this._loop(); } },
+  stop(){ this.playing=false; clearTimeout(this.timer); },
+  _loop(){ if(!this.playing||!this.ctx)return; try{
+      const t=TRACKS[this.cur]||TRACKS.main, ctx=this.ctx, beat=60/t.bpm, start=ctx.currentTime+0.06;
+      const mel=t.mel.split(' '), bass=t.bass.split(' ');
+      mel.forEach((n,i)=>{ if(NF[n]) this._voice(NF[n], start+i*beat*0.5, beat*0.5*0.9, t.wave, 0.14); });
+      bass.forEach((n,i)=>{ if(NF[n]) this._voice(NF[n], start+i*beat, beat*0.92, 'triangle', 0.12); });
+      const beats=Math.round(mel.length*0.5);
+      for(let i=0;i<beats;i++){ this._kick(start+i*beat); this._hat(start+(i+0.5)*beat); }
+      this.timer=setTimeout(()=>this._loop(), Math.max(300, beats*beat*1000-40));
+    }catch(e){} },
+  _voice(f,t,d,w,g){ const c=this.ctx,o=c.createOscillator(),a=c.createGain(); o.type=w||'square'; o.frequency.value=f;
+    a.gain.setValueAtTime(0.0001,t); a.gain.linearRampToValueAtTime(g,t+0.015); a.gain.exponentialRampToValueAtTime(0.0006,t+d);
+    o.connect(a); a.connect(this.master); o.start(t); o.stop(t+d+0.02); },
+  _kick(t){ const c=this.ctx,o=c.createOscillator(),g=c.createGain(); o.type='sine';
+    o.frequency.setValueAtTime(155,t); o.frequency.exponentialRampToValueAtTime(48,t+0.12);
+    g.gain.setValueAtTime(0.24,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.14);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t+0.16); },
+  _hat(t){ const c=this.ctx,b=c.createBuffer(1,256,c.sampleRate),d=b.getChannelData(0);
+    for(let i=0;i<256;i++)d[i]=Math.random()*2-1; const s=c.createBufferSource(); s.buffer=b;
+    const g=c.createGain(); g.gain.setValueAtTime(0.045,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.03);
+    const f=c.createBiquadFilter(); f.type='highpass'; f.frequency.value=7200;
+    s.connect(f); f.connect(g); g.connect(this.master); s.start(t); s.stop(t+0.05); }
+};
 
 const STAT_META={
   fashion:{label:'패션',},charisma:{label:'카리스마'},stamina:{label:'체력'},
@@ -493,10 +566,12 @@ async function executeMonth(){
   const dline=deltaLine(before);
   pushLog(`📅 이번 달 스케줄 완료! ${dline}`,false);
   S.weekPlan=[]; S.menu='root'; scenePlaying=false;
+  BGM.play('main');
   advanceMonth();
 }
 function playWeekScene(a, wk){
   return new Promise(res=>{
+    BGM.play(themeForAct(a));
     const layer=document.getElementById('sceneLayer');
     if(!layer){ res(); return; }
     layer.innerHTML=sceneHTML(a)+`<div class="week-badge">${wk}주차</div>`;
@@ -616,6 +691,7 @@ function srow(label,v,delta,stress){
 
 function renderMenu(){
   const el=document.getElementById('menu');
+  if(!scenePlaying){ if(S.menu==='root'||S.menu==='special') BGM.play('main'); else if(CAT_THEME[S.menu]) BGM.play(CAT_THEME[S.menu]); }
   if(S.menu==='root'){
     const wk=S.weekPlan.length;
     if(wk>=4){
@@ -902,9 +978,17 @@ const SFG={
 };
 SFG.nailshop=SFG.nail;
 function personSVG(kind){
-  if(kind==='stylist') return `<svg viewBox="0 0 80 170" xmlns="http://www.w3.org/2000/svg"><ellipse cx="40" cy="150" rx="26" ry="18" fill="#2a2a34" opacity=".3"/><path d="M20 168 Q18 96 40 90 Q62 96 60 168 Z" fill="#f4f4f6"/><path d="M40 100 L40 168" stroke="#d8d8e0" stroke-width="1.5"/><path d="M22 108 Q6 130 14 150 l7 -3 Q14 130 30 116 Z" fill="#f0c8a6"/><circle cx="14" cy="150" r="7" fill="#f0c8a6"/><rect x="8" y="140" width="4" height="16" rx="2" fill="#8a5a3a" transform="rotate(20 10 148)"/><path d="M2 158 l10 -14" stroke="#ff8fb8" stroke-width="4" stroke-linecap="round"/><rect x="34" y="80" width="12" height="16" rx="4" fill="#f0c8a6"/><ellipse cx="40" cy="62" rx="20" ry="22" fill="#ffe1c8"/><path d="M20 62 Q20 40 40 39 Q60 40 60 62 Q58 48 40 48 Q22 48 20 62 Z" fill="#3a2a3a"/><path d="M20 60 Q16 96 24 120 Q28 84 28 64 Z" fill="#3a2a3a"/><path d="M60 60 Q64 96 56 120 Q52 84 52 64 Z" fill="#3a2a3a"/><path d="M26 32 Q23 20 33 24 Q37 28 38 36 Z" fill="#ff9ec8" stroke="#f07bb0" stroke-width="1"/><path d="M54 32 Q57 20 47 24 Q43 28 42 36 Z" fill="#ff9ec8" stroke="#f07bb0" stroke-width="1"/><path d="M20 44 Q18 26 40 24 Q62 26 60 44 Q50 36 40 36 Q30 36 20 44 Z" fill="#ff9ec8"/><path d="M19 43 Q40 36 61 43 Q54 51 40 49 Q26 51 19 43 Z" fill="#f07bb0"/><circle cx="33" cy="62" r="2.4" fill="#3a2a2a"/><circle cx="47" cy="62" r="2.4" fill="#3a2a2a"/><path d="M35 72 Q40 75 45 72" stroke="#d06a80" stroke-width="1.6" fill="none"/></svg>`;
+  if(kind==='stylist') return `<svg viewBox="0 0 80 170" xmlns="http://www.w3.org/2000/svg"><ellipse cx="40" cy="150" rx="26" ry="18" fill="#2a2a34" opacity=".3"/><path d="M16 150 Q10 72 28 44 L52 44 Q70 72 64 150 Q62 92 50 74 L30 74 Q18 92 16 150 Z" fill="#2a1e28"/><path d="M20 168 Q18 96 40 90 Q62 96 60 168 Z" fill="#f4f4f6"/><path d="M40 100 L40 168" stroke="#d8d8e0" stroke-width="1.5"/><path d="M22 108 Q6 130 14 150 l7 -3 Q14 130 30 116 Z" fill="#f0c8a6"/><circle cx="14" cy="150" r="7" fill="#f0c8a6"/><rect x="8" y="140" width="4" height="16" rx="2" fill="#8a5a3a" transform="rotate(20 10 148)"/><path d="M2 158 l10 -14" stroke="#ff8fb8" stroke-width="4" stroke-linecap="round"/><rect x="34" y="80" width="12" height="16" rx="4" fill="#f0c8a6"/><ellipse cx="40" cy="62" rx="20" ry="22" fill="#ffe1c8"/><path d="M20 62 Q20 40 40 39 Q60 40 60 62 Q58 48 40 48 Q22 48 20 62 Z" fill="#3a2a3a"/><path d="M20 60 Q16 96 24 120 Q28 84 28 64 Z" fill="#3a2a3a"/><path d="M60 60 Q64 96 56 120 Q52 84 52 64 Z" fill="#3a2a3a"/><path d="M26 32 Q23 20 33 24 Q37 28 38 36 Z" fill="#ff9ec8" stroke="#f07bb0" stroke-width="1"/><path d="M54 32 Q57 20 47 24 Q43 28 42 36 Z" fill="#ff9ec8" stroke="#f07bb0" stroke-width="1"/><path d="M20 44 Q18 26 40 24 Q62 26 60 44 Q50 36 40 36 Q30 36 20 44 Z" fill="#ff9ec8"/><path d="M19 43 Q40 36 61 43 Q54 51 40 49 Q26 51 19 43 Z" fill="#f07bb0"/><circle cx="33" cy="62" r="2.4" fill="#3a2a2a"/><circle cx="47" cy="62" r="2.4" fill="#3a2a2a"/><path d="M35 72 Q40 75 45 72" stroke="#d06a80" stroke-width="1.6" fill="none"/></svg>`;
   if(kind==='photographer') return `<svg viewBox="0 0 80 170" xmlns="http://www.w3.org/2000/svg"><ellipse cx="40" cy="150" rx="26" ry="18" fill="#2a2a34" opacity=".3"/><path d="M20 168 Q18 96 40 90 Q62 96 60 168 Z" fill="#2a2e3a"/><path d="M58 112 Q74 122 78 100 l-6 -2 Q70 116 54 108 Z" fill="#f0c8a6"/><rect x="60" y="86" width="30" height="20" rx="4" fill="#1a1a20" transform="translate(-14 0)"/><rect x="52" y="90" width="10" height="12" rx="2" fill="#3a3a44"/><circle cx="60" cy="96" r="6" fill="#5a6a7a"/><rect x="34" y="80" width="12" height="16" rx="4" fill="#f0c8a6"/><ellipse cx="40" cy="62" rx="20" ry="22" fill="#ffe1c8"/><path d="M20 60 Q18 32 40 32 Q62 32 60 60 Q56 40 40 40 Q24 40 20 60 Z" fill="#2a2018"/><circle cx="33" cy="62" r="2.4" fill="#3a2a2a"/><circle cx="47" cy="62" r="2.4" fill="#3a2a2a"/><path d="M35 72 Q40 74 45 72" stroke="#c05a6a" stroke-width="1.5" fill="none"/></svg>`;
   if(kind==='customer') return `<svg viewBox="0 0 70 120" xmlns="http://www.w3.org/2000/svg"><path d="M14 118 Q12 70 35 66 Q58 70 56 118 Z" fill="#6a5a7a"/><ellipse cx="35" cy="44" rx="18" ry="20" fill="#4a3a3a"/><path d="M17 44 Q17 20 35 20 Q53 20 53 44 Q53 70 44 78 L26 78 Q17 70 17 44 Z" fill="#2a1e24"/></svg>`;
+  return '';
+}
+/* 치바 탐험 몬스터: 동아리 학생(야구/관현악/댄스) + 서예 선생님(아주머니) */
+function monsterSVG(type){
+  if(type==='baseball') return `<svg viewBox="0 0 70 150" xmlns="http://www.w3.org/2000/svg"><ellipse cx="35" cy="146" rx="18" ry="5" fill="#000" opacity=".25"/><rect x="27" y="104" width="7" height="40" fill="#eceef2"/><rect x="36" y="104" width="7" height="40" fill="#eceef2"/><path d="M24 142 h12 v6 h-14z" fill="#2a2a34"/><path d="M34 142 h12 v6 h-14z" fill="#2a2a34"/><path d="M21 66 Q35 60 49 66 L47 106 L23 106 Z" fill="#f6f6f8"/><path d="M28 64 L27 106 M35 62 L35 106 M42 64 L43 106" stroke="#c23636" stroke-width="1" opacity=".55"/><path d="M22 68 Q12 80 18 100 l6 -2 Q18 82 27 74 Z" fill="#f0cba6"/><path d="M48 68 Q58 60 60 42 l-6 -1 Q54 60 44 72 Z" fill="#f0cba6"/><rect x="55" y="16" width="6" height="34" rx="3" fill="#caa25a" transform="rotate(24 58 33)"/><ellipse cx="35" cy="52" rx="14" ry="15" fill="#f0cba6"/><path d="M21 48 Q21 33 35 32 Q49 33 49 48 Q42 42 35 42 Q28 42 21 48 Z" fill="#16305c"/><path d="M20 49 Q35 44 50 49 Q55 55 47 57 Q35 52 23 57 Q15 55 20 49 Z" fill="#0f2244"/><circle cx="30" cy="52" r="1.6" fill="#3a2a2a"/><circle cx="40" cy="52" r="1.6" fill="#3a2a2a"/><path d="M31 58 Q35 61 39 58" stroke="#c0506a" stroke-width="1.4" fill="none"/></svg>`;
+  if(type==='orchestra') return `<svg viewBox="0 0 70 150" xmlns="http://www.w3.org/2000/svg"><ellipse cx="35" cy="146" rx="18" ry="5" fill="#000" opacity=".25"/><rect x="27" y="104" width="7" height="40" fill="#2a2a3a"/><rect x="36" y="104" width="7" height="40" fill="#2a2a3a"/><path d="M24 142 h12 v6 h-14z" fill="#151520"/><path d="M34 142 h12 v6 h-14z" fill="#151520"/><path d="M21 66 Q35 60 49 66 L47 106 L23 106 Z" fill="#26304a"/><path d="M35 62 L31 100 M35 62 L39 100" stroke="#e8e0c0" stroke-width="1.3"/><path d="M31 66 L35 74 L39 66 Z" fill="#c23636"/><path d="M22 68 Q14 60 18 44 l6 1 Q20 60 27 72 Z" fill="#f0cba6"/><ellipse cx="47" cy="58" rx="6" ry="10.5" fill="#8a4a2a" transform="rotate(-30 47 58)"/><line x1="40" y1="66" x2="56" y2="44" stroke="#3a2418" stroke-width="1.6"/><path d="M48 70 Q60 74 62 92 l-6 0 Q54 76 44 74 Z" fill="#f0cba6"/><line x1="33" y1="60" x2="60" y2="70" stroke="#d8c090" stroke-width="1.3"/><ellipse cx="35" cy="50" rx="14" ry="15" fill="#f0cba6"/><path d="M20 50 Q19 30 35 29 Q51 30 50 50 Q48 36 35 37 Q22 36 20 50 Z" fill="#2a2018"/><circle cx="30" cy="50" r="1.6" fill="#3a2a2a"/><circle cx="40" cy="50" r="1.6" fill="#3a2a2a"/><path d="M32 57 Q35 59 38 57" stroke="#c0506a" stroke-width="1.3" fill="none"/></svg>`;
+  if(type==='dance') return `<svg viewBox="0 0 70 150" xmlns="http://www.w3.org/2000/svg"><ellipse cx="35" cy="146" rx="18" ry="5" fill="#000" opacity=".25"/><path d="M28 100 L22 144 l8 0 L33 104 Z" fill="#2a2a3a"/><path d="M40 100 L48 140 l7 3 L45 104 Z" fill="#2a2a3a"/><path d="M20 143 h12 v5 h-14z" fill="#fff"/><path d="M46 140 l10 4 -2 5 -11 -4z" fill="#fff"/><path d="M23 66 Q35 60 47 66 L45 98 L25 98 Z" fill="#ff5f9e"/><path d="M24 68 Q14 58 12 40 l6 -2 Q20 58 29 72 Z" fill="#f0cba6"/><path d="M46 68 Q58 72 60 90 l-6 1 Q52 74 41 72 Z" fill="#f0cba6"/><ellipse cx="35" cy="52" rx="14" ry="15" fill="#f0cba6"/><path d="M20 52 Q19 32 35 31 Q51 32 50 52 Q48 38 35 39 Q22 38 20 52 Z" fill="#3a2a44"/><path d="M19 50 Q19 30 35 30 Q51 30 51 50" stroke="#222" stroke-width="3" fill="none"/><rect x="15" y="48" width="7" height="12" rx="3" fill="#ff5f9e"/><rect x="48" y="48" width="7" height="12" rx="3" fill="#ff5f9e"/><circle cx="30" cy="52" r="1.6" fill="#3a2a2a"/><circle cx="40" cy="52" r="1.6" fill="#3a2a2a"/><path d="M31 58 Q35 61 39 58" stroke="#c0506a" stroke-width="1.4" fill="#ff9db3"/></svg>`;
+  if(type==='calli') return `<svg viewBox="0 0 70 150" xmlns="http://www.w3.org/2000/svg"><ellipse cx="35" cy="147" rx="19" ry="5" fill="#000" opacity=".25"/><path d="M24 100 L22 144 l10 0 L34 104 Z" fill="#8a4a36"/><path d="M46 100 L48 144 l-10 0 L36 104 Z" fill="#8a4a36"/><path d="M20 142 h13 v6 h-15z" fill="#4a3020"/><path d="M37 142 h13 v6 h-15z" fill="#4a3020"/><path d="M23 64 Q35 58 47 64 L46 102 L24 102 Z" fill="#b6b6c0"/><path d="M27 62 Q35 67 43 62" stroke="#9a9aa6" stroke-width="1.6" fill="none"/><path d="M23 66 Q11 76 15 98 l6 -2 Q17 80 28 72 Z" fill="#f0cba6"/><path d="M47 66 Q59 70 60 90 l-6 1 Q53 74 42 72 Z" fill="#f0cba6"/><circle cx="17" cy="96" r="5" fill="#f0cba6"/><circle cx="57" cy="89" r="5" fill="#f0cba6"/><rect x="53" y="44" width="6" height="42" rx="3" fill="#5a3a1c" transform="rotate(14 56 65)"/><path d="M60 40 q5 9 0 18 q-5 -9 0 -18z" fill="#161616" transform="rotate(14 60 49)"/><ellipse cx="35" cy="48" rx="15" ry="16" fill="#f0cba6"/><path d="M18 46 Q15 24 35 22 Q55 24 52 46 Q52 33 45 30 Q49 40 42 37 Q45 28 37 30 Q39 24 35 28 Q31 24 33 30 Q25 28 28 37 Q21 33 21 46 Z" fill="#7a5442"/><circle cx="18" cy="42" r="4.5" fill="#7a5442"/><circle cx="52" cy="42" r="4.5" fill="#7a5442"/><circle cx="22" cy="30" r="4" fill="#7a5442"/><circle cx="48" cy="30" r="4" fill="#7a5442"/><rect x="23.5" y="45" width="11" height="9" rx="2.5" fill="#fff" fill-opacity=".12" stroke="#f4f4f4" stroke-width="2.6"/><rect x="36" y="45" width="11" height="9" rx="2.5" fill="#fff" fill-opacity=".12" stroke="#f4f4f4" stroke-width="2.6"/><line x1="34.5" y1="49" x2="36" y2="49" stroke="#f4f4f4" stroke-width="2.6"/><circle cx="29" cy="49.5" r="1.5" fill="#3a2a2a"/><circle cx="41" cy="49.5" r="1.5" fill="#3a2a2a"/><path d="M31 58 Q35 60 39 58" stroke="#9a4a5a" stroke-width="1.5" fill="none"/></svg>`;
   return '';
 }
 const SACT={
@@ -1107,24 +1191,27 @@ function makeItem(tier){
 }
 function itemDesc(it){ return Object.entries(it.boosts).map(([k,v])=>`${SNAME[k]}+${v}`).join(', '); }
 function makeMonster(tier){
-  const pool=[['진상 관광객','🧳',0],['삐끼 아저씨','🕴️',0],['라이벌 갸루','💅',1],['안티 팬','😾',1],['꼰대 PD','🎬',2],['갸루 여왕','👑',3]].filter(m=>m[2]<=tier);
-  const p=pool[rnd(0,pool.length-1)];
-  return {name:p[0],icon:p[1],diff:18+tier*12+rnd(-5,10),tier};
+  if(tier>=4) return {name:'서예 선생님', type:'calli', diff:18+tier*12+rnd(-5,10), tier};
+  const clubs=[['야구부 부원','baseball'],['관현악부 부원','orchestra'],['댄스부 부원','dance']];
+  const c=clubs[rnd(0,clubs.length-1)];
+  return {name:c[0], type:c[1], diff:18+tier*12+rnd(-5,10), tier};
 }
 function chibaBgSVG(dg,m){
-  const bgc=['#3a2e4a','#2e3a4a','#4a3a2e','#33232a'][(dg.tier-1)%4];
-  return `<svg class="ev-bg" viewBox="0 0 320 190" preserveAspectRatio="none"><rect width="320" height="190" fill="${bgc}"/><rect y="152" width="320" height="38" fill="rgba(0,0,0,.35)"/><text x="14" y="26" font-size="13" fill="#ffd98a" font-family="sans-serif">${dg.name}</text></svg>${m?`<div class="ev-foe">${m.icon}</div>`:''}`;
+  const bgc=['#2e3a52','#34405a','#3a3050','#33232a'][(dg.tier-1)%4];
+  const wall=dg.tier<=3?`<rect x="30" y="34" width="260" height="70" rx="4" fill="#1c2436" stroke="#4a5a7a" stroke-width="2"/><rect x="40" y="44" width="240" height="10" fill="#3a4a66"/><text x="45" y="72" font-size="9" fill="#8aa0c0" font-family="sans-serif">칠판</text>`
+    :`<rect x="34" y="34" width="120" height="80" rx="3" fill="#f0e8d8" stroke="#8a7a4a" stroke-width="3"/><text x="60" y="70" font-size="22" fill="#2a2a2a" font-family="serif">書</text>`;
+  return `<svg class="ev-bg" viewBox="0 0 320 190" preserveAspectRatio="none"><rect width="320" height="190" fill="${bgc}"/>${wall}<rect y="150" width="320" height="40" fill="#4a3a2a"/><rect y="146" width="320" height="6" fill="#5a4632"/><text x="14" y="24" font-size="13" fill="#ffd98a" font-family="sans-serif">${dg.name}</text></svg>${m?`<div class="ev-foe">${monsterSVG(m.type)}</div>`:''}`;
 }
 function chibaDungeonScene(dg,m){ return `<div class="ev-stagewrap">${chibaBgSVG(dg,m)}<div class="ev-hero bob" style="left:34%">${avatarSVG(S,{arms:'pose'})}</div></div>`; }
 function evBattleStage(dg,m){ return `<div class="ev-stagewrap">${chibaBgSVG(dg,m)}<div class="ev-hero" id="danceHero" style="left:34%"></div></div>`; }
 function chibaMapScene(hp,items){
-  return `<div class="ev-stagewrap"><svg class="ev-bg" viewBox="0 0 320 190" preserveAspectRatio="none"><rect width="320" height="190" fill="#a8d8c0"/><path d="M0 130 Q80 110 160 130 T320 130 L320 190 L0 190 Z" fill="#8ec8a0"/><text x="34" y="72" font-size="26">🐭</text><text x="108" y="58" font-size="26">🎪</text><text x="188" y="66" font-size="26">🏯</text><text x="262" y="76" font-size="26">⛰️</text><text x="140" y="152" font-size="24">🏘️</text></svg><div class="ev-badge">❤️ ${hp} · 🎒 ${items}</div></div>`;
+  return `<div class="ev-stagewrap"><svg class="ev-bg" viewBox="0 0 320 190" preserveAspectRatio="none"><rect width="320" height="190" fill="#a8d8c0"/><path d="M0 130 Q80 110 160 130 T320 130 L320 190 L0 190 Z" fill="#8ec8a0"/><g font-size="24"><text x="30" y="70">🏫</text><text x="102" y="56">🏫</text><text x="180" y="64">🏫</text><text x="256" y="72">✍️</text><text x="140" y="152">🏠</text></g></svg><div class="ev-badge">❤️ ${hp} · 🎒 ${items}</div></div>`;
 }
-function chibaTownScene(){ return `<div class="ev-stagewrap"><svg class="ev-bg" viewBox="0 0 320 190" preserveAspectRatio="none"><rect width="320" height="190" fill="#ffd9a8"/><rect y="120" width="320" height="70" fill="#c89a6a"/><g fill="#e05a5a">${[16,90,164,238].map(x=>`<rect x="${x}" y="72" width="60" height="48"/>`).join('')}</g><g fill="#fff" opacity=".85">${[16,90,164,238].map(x=>`<rect x="${x+8}" y="62" width="44" height="12"/>`).join('')}</g></svg><div class="ev-hero bob">${avatarSVG(S,{arms:'pose'})}</div></div>`; }
+function chibaTownScene(){ return `<div class="ev-stagewrap"><svg class="ev-bg" viewBox="0 0 320 190" preserveAspectRatio="none"><rect width="320" height="190" fill="#f2d0a8"/><rect y="120" width="320" height="70" fill="#c89a6a"/><rect x="40" y="46" width="240" height="90" rx="4" fill="#e8c49a"/><path d="M30 46 L160 12 L290 46 Z" fill="#b85a4a"/><rect x="130" y="86" width="60" height="50" rx="3" fill="#8a5a3a"/><rect x="58" y="70" width="40" height="34" rx="3" fill="#ffcf6a" opacity=".9"/><rect x="222" y="70" width="40" height="34" rx="3" fill="#ffcf6a" opacity=".9"/><text x="160" y="40" font-size="9" fill="#fff6e8" text-anchor="middle" font-family="sans-serif">미나미 본가</text></svg><div class="ev-hero bob">${avatarSVG(S,{arms:'pose'})}</div></div>`; }
 
 async function scChiba(){
   let hp=100; const items=[]; let running=true;
-  const DUNGEONS=[{name:'🐭 우라야스 테마파크',tier:1},{name:'🎪 마쿠하리 멧세',tier:2},{name:'🏯 나리타산 신쇼지',tier:3},{name:'⛰️ 노코기리야마',tier:4}];
+  const DUNGEONS=[{name:'🏫 치바니혼대 제일초등학교',tier:1},{name:'🏫 치바니혼대 제일중학교',tier:2},{name:'🏫 치바니혼대 제일고등학교',tier:3},{name:'✍️ 서예학원',tier:4}];
   Ev.scene(chibaMapScene(hp,0));
   Ev.text('🗾 <b>치바 탐험</b>! 유명 명소를 돌며 몬스터를 상대하고 아이템을 모으자.<br>❤️ 체력 게이지가 0이 되면 강제로 집에 돌아가.');
   await Ev.cont('출발 ▶');
@@ -1132,17 +1219,17 @@ async function scChiba(){
     Ev.scene(chibaMapScene(hp,items.length));
     Ev.text(`❤️ 체력 <b>${hp}</b> · 🎒 아이템 <b>${items.length}</b>개 · 어디로 갈까?`);
     const opts=DUNGEONS.map((d,i)=>({label:d.name,value:'d'+i,hint:'난이도 '+d.tier}));
-    opts.push({label:'🏘️ 후나바시 (휴식)',value:'town'});
-    opts.push({label:'🏠 집으로 돌아가기',value:'home'});
+    opts.push({label:'🏠 미나미 본가 (휴식)',value:'town'});
+    opts.push({label:'🚪 탐험 끝내기',value:'home'});
     const pick=await Ev.choose(opts);
     if(pick==='home'){ running=false; break; }
-    if(pick==='town'){ const heal=rnd(25,40); hp=Math.min(100,hp+heal); Ev.scene(chibaTownScene()); Ev.text(`🏘️ 후나바시 상점가에서 꿀휴식! 체력 <span class="plus">+${heal}</span> (현재 ${hp})`); await Ev.cont(); continue; }
+    if(pick==='town'){ const heal=rnd(25,40); hp=Math.min(100,hp+heal); Ev.scene(chibaTownScene()); Ev.text(`🏠 미나미 본가에서 엄마밥 먹고 꿀휴식! 체력 <span class="plus">+${heal}</span> (현재 ${hp})`); await Ev.cont(); continue; }
     const dg=DUNGEONS[+pick.slice(1)];
     let inD=true;
     while(inD && hp>0 && running){
       const m=makeMonster(dg.tier);
       Ev.scene(chibaDungeonScene(dg,m));
-      Ev.text(`${dg.name} 탐험 중… <b>${m.name}</b> ${m.icon} 이(가) 나타났다! (강함 ${m.diff})`);
+      Ev.text(`${dg.name} 탐험 중… <b>${m.name}</b>이(가) 나타났다! (강함 ${m.diff})`);
       let choice=await Ev.choose([{label:'⚔️ 싸운다',value:'fight'},{label:'🏃 도망간다',value:'flee'},{label:'🎒 훔친다',value:'steal'},{label:'🏠 집으로',value:'home'}]);
       if(choice==='home'){ running=false; inD=false; break; }
       if(choice==='flee'){
@@ -1157,7 +1244,7 @@ async function scChiba(){
       }
       if(choice==='fight'){
         Ev.scene(evBattleStage(dg,m)); document.getElementById('danceHero').innerHTML=avatarSVG(S,{arms:'pose'});
-        Ev.text(`<b>${m.name}</b> ${m.icon} 와의 대결! 무엇으로 승부할까?`);
+        Ev.text(`<b>${m.name}</b>와의 대결! 무엇으로 승부할까?`);
         const bt=await Ev.choose([{label:'💃 댄스 대결',value:'dance',hint:'댄스↑'},{label:'✍️ 서예 대결',value:'cal',hint:'지성↑'},{label:'💄 미모 대결',value:'beauty',hint:'매력·패션↑'}]);
         document.getElementById('eventChoices').innerHTML='';
         let power;
@@ -1188,10 +1275,10 @@ async function endChiba(hp,items){
 }
 
 const SPECIAL=[
-  {id:'music',name:'🎤 아이돌 음악방송',cond:s=>s.stats.popularity>=15,condTxt:'인기 15↑',run:scMusic},
-  {id:'dance',name:'🏆 댄스 대회',cond:s=>s.stats.dance>=15,condTxt:'댄스 15↑',run:scDance},
-  {id:'tour',name:'✈️ 월드투어',cond:s=>s.stats.popularity>=25&&s.money>=25000,condTxt:'인기25↑·2.5만G',run:scTour},
-  {id:'chiba',name:'🗾 치바 탐험',cond:s=>s.stats.stamina>=15,condTxt:'체력 15↑',run:scChiba},
+  {id:'music',name:'🎤 아이돌 음악방송',cond:s=>s.stats.popularity>=15,condTxt:'인기 15↑',bgm:'idol',run:scMusic},
+  {id:'dance',name:'🏆 댄스 대회',cond:s=>s.stats.dance>=15,condTxt:'댄스 15↑',bgm:'battle',run:scDance},
+  {id:'tour',name:'✈️ 월드투어',cond:s=>s.stats.popularity>=25&&s.money>=25000,condTxt:'인기25↑·2.5만G',bgm:'party',run:scTour},
+  {id:'chiba',name:'🗾 치바 탐험',cond:s=>s.stats.stamina>=15,condTxt:'체력 15↑',bgm:'battle',run:scChiba},
 ];
 async function runSpecial(id){
   if(scenePlaying) return;
@@ -1199,9 +1286,11 @@ async function runSpecial(id){
   const sp=SPECIAL.find(x=>x.id===id); if(!sp) return;
   if(!sp.cond(S)){ toast('조건 미달: '+sp.condTxt); return; }
   scenePlaying=true; S.menu='root';
+  BGM.play(sp.bgm||'battle');
   Ev.open(sp.name);
   try{ await sp.run(); }catch(e){ if(typeof console!=='undefined')console.error(e); }
   Ev.close(); scenePlaying=false;
+  BGM.play('main');
   advanceMonth();
 }
 /* 벽 액자 그림 (레퍼런스의 물고기/파도) */
@@ -1260,11 +1349,30 @@ function startGame(){
   document.getElementById('start').classList.add('hidden');
   document.getElementById('ending').classList.add('hidden');
   document.getElementById('game').classList.remove('hidden');
+  BGM.play('main');
   render();
 }
 document.getElementById('startBtn').onclick=startGame;
 document.getElementById('restartBtn').onclick=()=>{document.getElementById('ending').classList.add('hidden');document.getElementById('start').classList.remove('hidden');};
 document.getElementById('nameInput').addEventListener('keydown',e=>{if(e.key==='Enter')startGame();});
+
+/* ---------- 배경음악 컨트롤 (음량/음소거, 설정 저장) ---------- */
+(function(){
+  const btn=document.getElementById('bgmBtn'), sl=document.getElementById('bgmVol');
+  let v=0.4, muted=false;
+  try{ const sv=parseFloat(localStorage.getItem('gm_vol')); if(!isNaN(sv))v=sv; muted=localStorage.getItem('gm_mute')==='1'; }catch(e){}
+  BGM.vol=v; BGM.muted=muted; sl.value=Math.round(v*100); btn.textContent=muted?'🔇':'🔊';
+  sl.addEventListener('input',()=>{ const nv=sl.value/100;
+    if(muted){ muted=false; btn.textContent='🔊'; }
+    BGM.muted=false; BGM.setVol(nv);
+    try{ localStorage.setItem('gm_vol',nv); localStorage.setItem('gm_mute','0'); }catch(e){}
+    if(BGM.ctx&&BGM.ctx.state==='suspended') BGM.ctx.resume();
+  });
+  btn.addEventListener('click',()=>{ const on=BGM.toggle(); muted=!on; btn.textContent=on?'🔊':'🔇';
+    try{ localStorage.setItem('gm_mute',on?'0':'1'); }catch(e){}
+    if(on&&BGM.ctx&&BGM.ctx.state==='suspended') BGM.ctx.resume();
+  });
+})();
 </script>
 </body>
 </html>
