@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>톤체크 — 3초 만에 끝나는 AI 퍼스널컬러 진단</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Noto+Serif+KR:wght@600;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f0d12;
+  --card:#1a171f;
+  --card2:#221e29;
+  --line:#2e2937;
+  --text:#f2eff6;
+  --sub:#a89fb8;
+  --accent:#e8b4c8;
+  --accent2:#c9a7eb;
+  --gold:#e6c98a;
+  --ok:#7dd8a5;
+  --bad:#e88a8a;
+  --radius:18px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  font-family:'Noto Sans KR',sans-serif;
+  background:var(--bg);color:var(--text);
+  max-width:520px;margin:0 auto;
+  padding-bottom:calc(72px + env(safe-area-inset-bottom));
+  min-height:100vh;
+}
+h1,h2,h3{font-weight:900}
+button{font-family:inherit;cursor:pointer;border:none}
+img{max-width:100%}
+.hidden{display:none!important}
+
+/* ---------- header ---------- */
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:18px 20px 8px;
+}
+.logo{font-size:20px;font-weight:900;letter-spacing:-.5px}
+.logo em{font-style:normal;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.gear{background:var(--card);color:var(--sub);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-size:13px}
+
+/* ---------- tabs ---------- */
+nav{
+  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;max-width:520px;z-index:50;
+  display:flex;background:rgba(20,17,25,.96);backdrop-filter:blur(12px);
+  border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+nav button{
+  flex:1;background:none;color:var(--sub);
+  padding:12px 0 10px;font-size:11px;font-weight:500;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+}
+nav button .ico{font-size:20px;line-height:1}
+nav button.active{color:var(--accent)}
+main{padding:8px 20px 24px}
+
+/* ---------- common ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+.btn{
+  display:block;width:100%;text-align:center;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));
+  color:#231a28;font-weight:700;font-size:16px;
+  padding:15px;border-radius:14px;
+}
+.btn:disabled{opacity:.45}
+.btn.ghost{background:var(--card2);color:var(--text);border:1px solid var(--line)}
+.btn.small{width:auto;display:inline-block;padding:9px 16px;font-size:13px;border-radius:10px}
+.chip{display:inline-block;background:var(--card2);border:1px solid var(--line);color:var(--sub);border-radius:999px;padding:5px 12px;font-size:12px;margin:2px}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#231a28;font-weight:700}
+.sub{color:var(--sub);font-size:13px;line-height:1.6}
+.section-t{font-size:15px;font-weight:700;margin-bottom:10px}
+
+/* ---------- home / scan ---------- */
+.hero{padding:26px 4px 18px}
+.hero .badge{font-size:12px;color:var(--accent2);font-weight:700;letter-spacing:2px}
+.hero h1{font-size:28px;line-height:1.35;margin:10px 0 8px;letter-spacing:-.5px}
+.hero h1 .grad{background:linear-gradient(90deg,var(--accent),var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent}
+.preview-wrap{position:relative;border-radius:var(--radius);overflow:hidden;background:var(--card2);border:1px dashed var(--line);aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+.preview-wrap img,.preview-wrap video{width:100%;height:100%;object-fit:cover}
+.preview-empty{text-align:center;color:var(--sub);font-size:14px;padding:20px}
+.preview-empty .big{font-size:44px;display:block;margin-bottom:10px}
+.scan-overlay{position:absolute;inset:0;pointer-events:none}
+.scan-line{position:absolute;left:6%;right:6%;height:3px;border-radius:3px;background:linear-gradient(90deg,transparent,var(--accent),transparent);box-shadow:0 0 24px var(--accent);animation:scan 1.6s ease-in-out infinite}
+@keyframes scan{0%{top:8%}50%{top:88%}100%{top:8%}}
+.shutter-flash{position:fixed;inset:0;background:#fff;z-index:99;opacity:0;pointer-events:none}
+.shutter-flash.go{animation:flash .45s ease-out}
+@keyframes flash{0%{opacity:.9}100%{opacity:0}}
+.row2{display:flex;gap:10px}
+.row2>*{flex:1}
+.loading-msg{text-align:center;color:var(--accent2);font-size:14px;font-weight:500;margin-top:12px;min-height:20px}
+
+/* ---------- result ---------- */
+.result-season{
+  text-align:center;padding:26px 18px;border-radius:var(--radius);
+  background:radial-gradient(120% 120% at 50% 0%,#2c2434 0%,var(--card) 70%);
+  border:1px solid var(--line);margin-bottom:16px;
+}
+.result-season .small{font-size:13px;color:var(--sub);letter-spacing:3px}
+.result-season h2{font-size:30px;margin:10px 0;letter-spacing:-.5px;font-family:'Noto Serif KR',serif}
+.result-season .tags{margin-top:6px}
+.result-season .tags span{color:var(--accent);font-weight:700;font-size:14px;margin:0 4px}
+.conf-bar{height:6px;background:var(--card2);border-radius:6px;overflow:hidden;margin:16px auto 6px;max-width:220px}
+.conf-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.palette{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.swatch{border-radius:12px;aspect-ratio:1;position:relative;border:1px solid rgba(255,255,255,.08)}
+.swatch b{position:absolute;left:0;right:0;bottom:0;font-size:9px;font-weight:500;text-align:center;padding:3px 2px;background:rgba(0,0,0,.45);color:#fff;border-radius:0 0 11px 11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ul.feat{list-style:none}
+ul.feat li{padding:7px 0 7px 24px;position:relative;font-size:14px;line-height:1.55;color:#ddd6e8}
+ul.feat li::before{content:"✦";position:absolute;left:2px;color:var(--accent2)}
+.celebs{display:flex;flex-wrap:wrap;gap:6px}
+
+/* ---------- card templates ---------- */
+.tpl-pick{display:flex;gap:8px;margin-bottom:12px}
+.tpl-pick button{flex:1;background:var(--card2);border:1px solid var(--line);color:var(--sub);border-radius:12px;padding:10px;font-size:13px;font-weight:700}
+.tpl-pick button.on{border-color:var(--accent);color:var(--accent)}
+#cardCanvas{width:100%;border-radius:16px;border:1px solid var(--line);display:block}
+
+/* ---------- match tab ---------- */
+.prod{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
+.prod .thumb{width:52px;height:52px;border-radius:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:24px;border:1px solid rgba(255,255,255,.08)}
+.prod .info{flex:1;min-width:0}
+.prod .brand{font-size:11px;color:var(--sub)}
+.prod .name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prod .price{font-size:12px;color:var(--gold);margin-top:2px}
+.verdict{font-size:12px;font-weight:900;border-radius:10px;padding:6px 10px;flex-shrink:0;text-align:center}
+.verdict.best{background:rgba(125,216,165,.15);color:var(--ok)}
+.verdict.worst{background:rgba(232,138,138,.15);color:var(--bad)}
+.verdict.soso{background:var(--card2);color:var(--sub)}
+.ox-result{text-align:center;padding:18px}
+.ox-result .mark{font-size:64px;font-weight:900;line-height:1}
+.ox-result .mark.o{color:var(--ok)}
+.ox-result .mark.x{color:var(--bad)}
+
+/* ---------- community ---------- */
+.post{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:10px}
+.post .meta{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.post .avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;background:var(--card2)}
+.post .nick{font-size:13px;font-weight:700}
+.post .tone-badge{font-size:10px;color:#231a28;background:var(--accent);border-radius:999px;padding:2px 8px;font-weight:700}
+.post .time{font-size:11px;color:var(--sub);margin-left:auto}
+.post .body{font-size:14px;line-height:1.65;color:#e6e0ef;white-space:pre-wrap}
+.post .actions{margin-top:10px;display:flex;gap:14px}
+.post .actions button{background:none;color:var(--sub);font-size:12px}
+.post .actions button.liked{color:var(--accent)}
+.write-box textarea{width:100%;background:var(--card2);border:1px solid var(--line);border-radius:12px;color:var(--text);padding:12px;font-family:inherit;font-size:14px;resize:none;min-height:70px}
+.write-box textarea:focus{outline:none;border-color:var(--accent2)}
+
+/* ---------- modal ---------- */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:90;display:flex;align-items:center;justify-content:center;padding:24px}
+.modal .inner{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:24px;width:100%;max-width:400px}
+.modal input{width:100%;background:var(--card2);border:1px solid var(--line);border-radius:12px;color:var(--text);padding:12px;font-size:14px;margin:12px 0;font-family:inherit}
+.modal input:focus{outline:none;border-color:var(--accent2)}
+.toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%);background:#332c3e;color:#fff;font-size:13px;padding:10px 18px;border-radius:999px;z-index:99;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.25);border-top-color:#231a28;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-3px;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">TONE<em>CHECK</em> ✦</div>
+  <button class="gear" id="btnSettings">⚙ API 키</button>
+</header>
+
+<main>
+<!-- ============ TAB 1 : SCAN ============ -->
+<section id="tab-scan">
+  <div class="hero" id="heroBlock">
+    <div class="badge">AI PERSONAL COLOR</div>
+    <h1>3초 만에 끝나는<br><span class="grad">내 미모 치트키</span> 분석</h1>
+    <p class="sub">필터로 눈대중 비교하는 앱은 그만. AI가 사람처럼 피부·머리카락·눈동자·조명 맥락까지 통째로 읽고 12타입 퍼스널컬러를 진단해 드려요.</p>
+  </div>
+
+  <div class="preview-wrap" id="previewWrap">
+    <div class="preview-empty" id="previewEmpty"><span class="big">🤳</span>자연광에서 찍은 정면 셀카가<br>가장 정확해요</div>
+    <video id="camVideo" class="hidden" autoplay playsinline muted></video>
+    <img id="previewImg" class="hidden" alt="">
+    <div class="scan-overlay hidden" id="scanOverlay"><div class="scan-line"></div></div>
+  </div>
+
+  <div class="row2" style="margin-bottom:10px">
+    <button class="btn ghost" id="btnCamera">📷 카메라 열기</button>
+    <button class="btn ghost" id="btnUpload">🖼 앨범에서 선택</button>
+  </div>
+  <button class="btn hidden" id="btnShoot">✨ 촬영하기</button>
+  <button class="btn" id="btnAnalyze" disabled>AI 진단 시작</button>
+  <div class="loading-msg" id="loadingMsg"></div>
+  <input type="file" id="fileInput" accept="image/*" class="hidden">
+
+  <!-- ===== result ===== -->
+  <div id="resultBlock" class="hidden">
+    <div class="result-season">
+      <div class="small">YOUR PERSONAL COLOR</div>
+      <h2 id="rSeason">—</h2>
+      <div class="tags" id="rTags"></div>
+      <div class="conf-bar"><i id="rConfBar" style="width:0%"></i></div>
+      <div class="sub" id="rConfTxt"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-t">💎 내 톤의 핵심 특징</div>
+      <ul class="feat" id="rFeatures"></ul>
+    </div>
+
+    <div class="card">
+      <div class="section-t">🌟 같은 톤 연예인</div>
+      <div class="celebs" id="rCelebs"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-t">💚 베스트 컬러</div>
+      <div class="palette" id="rBest"></div>
+      <div style="height:16px"></div>
+      <div class="section-t">🚫 워스트 컬러</div>
+      <div class="palette" id="rWorst"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-t">💄 메이크업 & 스타일 팁</div>
+      <p class="sub" id="rTips" style="color:#ddd6e8;font-size:14px"></p>
+    </div>
+
+    <!-- SNS card -->
+    <div class="card">
+      <div class="section-t">📸 SNS 자랑용 퍼스널 카드</div>
+      <p class="sub" style="margin-bottom:12px">인스타 스토리 규격(1080×1920)으로 발급됩니다.</p>
+      <div class="tpl-pick">
+        <button data-tpl="magazine" class="on">📖 잡지 에디션</button>
+        <button data-tpl="photocard">💿 아이돌 포토카드</button>
+      </div>
+      <canvas id="cardCanvas" width="1080" height="1920"></canvas>
+      <div style="height:12px"></div>
+      <div class="row2">
+        <button class="btn ghost" id="btnSaveCard">⬇ 저장</button>
+        <button class="btn" id="btnShareCard">공유하기</button>
+      </div>
+    </div>
+    <button class="btn ghost" id="btnRetry">🔄 다시 진단하기</button>
+  </div>
+</section>
+
+<!-- ============ TAB 2 : MATCH ============ -->
+<section id="tab-match" class="hidden">
+  <div class="hero" style="padding-bottom:8px">
+    <div class="badge">MY MATCH</div>
+    <h1 style="font-size:24px">나의 <span class="grad">착붙 매칭</span></h1>
+    <p class="sub" id="matchIntro">먼저 [AI 스캔] 탭에서 진단을 받으면 내 톤 기준으로 필터링돼요.</p>
+  </div>
+
+  <div class="card">
+    <div class="section-t">🛍 지금 인기템, 내 톤엔?</div>
+    <p class="sub" style="margin-bottom:12px">이번 주 인기 뷰티템을 내 톤 기준으로 O/X 판정한 결과예요.</p>
+    <div id="prodList"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-t">🎨 파우치 & 염색 검사</div>
+    <p class="sub" style="margin-bottom:12px">내 파우치 속 화장품이나 염색하고 싶은 컬러 사진을 올리면 내 톤과 어울리는지 AI가 O/X로 판별해 드려요.</p>
+    <div class="preview-wrap" id="oxPreviewWrap" style="aspect-ratio:4/3">
+      <div class="preview-empty" id="oxEmpty"><span class="big">💄</span>화장품 / 염색 컬러 사진</div>
+      <img id="oxImg" class="hidden" alt="">
+      <div class="scan-overlay hidden" id="oxScan"><div class="scan-line"></div></div>
+    </div>
+    <div class="row2">
+      <button class="btn ghost" id="btnOxUpload">사진 선택</button>
+      <button class="btn" id="btnOxCheck" disabled>O/X 판별</button>
+    </div>
+    <input type="file" id="oxFile" accept="image/*" class="hidden">
+    <div id="oxResult" class="ox-result hidden">
+      <div class="mark" id="oxMark"></div>
+      <h3 id="oxTitle" style="margin:8px 0 6px"></h3>
+      <p class="sub" id="oxReason"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TAB 3 : COMMUNITY ============ -->
+<section id="tab-comm" class="hidden">
+  <div class="hero" style="padding-bottom:8px">
+    <div class="badge">TONE & TONE</div>
+    <h1 style="font-size:24px">톤앤톤 <span class="grad">커뮤니티</span></h1>
+    <p class="sub">같은 톤끼리 모여서 인생템 공유하는 놀이터 🛝</p>
+  </div>
+
+  <div style="margin-bottom:12px;overflow-x:auto;white-space:nowrap" id="boardChips"></div>
+
+  <div class="card write-box">
+    <textarea id="postInput" placeholder="우리 톤 인생템, 꿀팁을 공유해 주세요!"></textarea>
+    <div style="height:10px"></div>
+    <button class="btn small" id="btnPost">등록</button>
+  </div>
+
+  <div id="postList"></div>
+</section>
+</main>
+
+<!-- ============ NAV ============ -->
+<nav>
+  <button data-tab="scan" class="active"><span class="ico">🤳</span>AI 스캔</button>
+  <button data-tab="match"><span class="ico">💄</span>착붙 매칭</button>
+  <button data-tab="comm"><span class="ico">💬</span>커뮤니티</button>
+</nav>
+
+<!-- ============ settings modal ============ -->
+<div class="modal hidden" id="settingsModal">
+  <div class="inner">
+    <h3>Claude API 키 설정</h3>
+    <p class="sub" style="margin-top:8px">AI 진단은 Anthropic Claude 비전 API를 사용합니다. <a href="https://console.anthropic.com/" target="_blank" style="color:var(--accent2)">console.anthropic.com</a>에서 발급한 키를 입력하세요.<br><br>⚠️ 키는 이 기기 브라우저(localStorage)에만 저장되며 Anthropic API 외 어디에도 전송되지 않아요.</p>
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
+    <div class="row2">
+      <button class="btn ghost" id="btnCloseSettings">닫기</button>
+      <button class="btn" id="btnSaveKey">저장</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="shutter-flash" id="flash"></div>
+
+<script>
+"use strict";
+/* =====================================================
+   TONECHECK — AI Personal Color (Claude Vision API)
+===================================================== */
+const $ = (s)=>document.querySelector(s);
+const $$ = (s)=>document.querySelectorAll(s);
+const LS = {
+  get(k,d){ try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d} },
+  set(k,v){ localStorage.setItem(k,JSON.stringify(v)) }
+};
+function toast(msg){
+  const t=$("#toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove("show"),2400);
+}
+
+/* ---------- tabs ---------- */
+$$("nav button").forEach(b=>b.addEventListener("click",()=>{
+  $$("nav button").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active");
+  ["scan","match","comm"].forEach(t=>$("#tab-"+t).classList.toggle("hidden",t!==b.dataset.tab));
+  if(b.dataset.tab==="match") renderProducts();
+  if(b.dataset.tab==="comm") renderPosts();
+}));
+
+/* ---------- API key ---------- */
+$("#btnSettings").addEventListener("click",()=>{
+  $("#apiKeyInput").value = LS.get("tc_api_key","");
+  $("#settingsModal").classList.remove("hidden");
+});
+$("#btnCloseSettings").addEventListener("click",()=>$("#settingsModal").classList.add("hidden"));
+$("#btnSaveKey").addEventListener("click",()=>{
+  const k=$("#apiKeyInput").value.trim();
+  if(!k.startsWith("sk-ant")){ toast("올바른 Anthropic API 키를 입력해 주세요"); return; }
+  LS.set("tc_api_key",k);
+  $("#settingsModal").classList.add("hidden");
+  toast("API 키가 저장됐어요 ✅");
+});
+function requireKey(){
+  const k=LS.get("tc_api_key","");
+  if(!k){ toast("먼저 우측 상단 ⚙에서 API 키를 등록해 주세요"); $("#settingsModal").classList.remove("hidden"); return null; }
+  return k;
+}
+
+/* ---------- Claude Vision API ---------- */
+const API_URL="https://api.anthropic.com/v1/messages";
+const MODEL="claude-opus-4-8";
+
+async function callClaude(key, blocks, schema, maxTokens){
+  const res = await fetch(API_URL,{
+    method:"POST",
+    headers:{
+      "content-type":"application/json",
+      "x-api-key":key,
+      "anthropic-version":"2023-06-01",
+      "anthropic-dangerous-direct-browser-access":"true"
+    },
+    body:JSON.stringify({
+      model:MODEL,
+      max_tokens:maxTokens,
+      output_config:{format:{type:"json_schema",schema}},
+      messages:[{role:"user",content:blocks}]
+    })
+  });
+  if(!res.ok){
+    const err=await res.json().catch(()=>({}));
+    throw new Error(err?.error?.message || `API 오류 (${res.status})`);
+  }
+  const data=await res.json();
+  if(data.stop_reason==="refusal") throw new Error("이 이미지는 분석할 수 없어요. 다른 사진으로 시도해 주세요.");
+  const text=(data.content||[]).find(b=>b.type==="text");
+  if(!text) throw new Error("응답을 해석하지 못했어요.");
+  return JSON.parse(text.text);
+}
+
+/* structured output schema : diagnosis */
+const DIAG_SCHEMA={
+  type:"object",
+  properties:{
+    is_face:{type:"boolean",description:"사람 얼굴이 충분히 보이는 사진인지"},
+    season:{type:"string",description:"12타입 한국어 명칭. 예: 가을 뮤트 소프트, 봄 웜 라이트"},
+    season_en:{type:"string",description:"영문 표기. 예: Autumn Mute Soft"},
+    hashtags:{type:"array",items:{type:"string"},description:"# 포함 감성 해시태그 3개. 예: #밀크티 #생기발랄 #인간비타민"},
+    confidence:{type:"integer",description:"진단 확신도 0~100"},
+    lighting_note:{type:"string",description:"사진의 조명 상태와 그것을 어떻게 보정해 판단했는지 한 문장"},
+    features:{type:"array",items:{type:"string"},description:"이 톤의 핵심 특징 4가지, 사진에서 관찰한 근거 포함"},
+    celebrities:{type:"array",items:{type:"string"},description:"같은 톤으로 알려진 한국 연예인 4명"},
+    best_colors:{type:"array",items:{type:"object",properties:{name:{type:"string"},hex:{type:"string"}},required:["name","hex"],additionalProperties:false},description:"베스트 컬러 8개"},
+    worst_colors:{type:"array",items:{type:"object",properties:{name:{type:"string"},hex:{type:"string"}},required:["name","hex"],additionalProperties:false},description:"워스트 컬러 4개"},
+    tips:{type:"string",description:"메이크업/헤어/패션 스타일 팁 3~4문장"}
+  },
+  required:["is_face","season","season_en","hashtags","confidence","lighting_note","features","celebrities","best_colors","worst_colors","tips"],
+  additionalProperties:false
+};
+
+const DIAG_PROMPT=`당신은 20만 원짜리 오프라인 퍼스널컬러 진단에 준하는 분석을 제공하는 전문 컬러리스트입니다.
+이 셀카를 단순 RGB 수치가 아니라 시각적 맥락 전체로 분석하세요:
+1) 조명(색온도, 방향, 강도)을 먼저 파악하고 그 영향을 머릿속에서 보정한 뒤 판단할 것
+2) 피부의 언더톤(웜/쿨), 명도, 채도 수용력
+3) 머리카락·눈동자·눈썹의 고유 색과 피부와의 대비감
+4) 얼굴 전체의 인상(선명/부드러움)
+이를 종합해 12타입 퍼스널컬러(봄웜 라이트/브라이트, 여름쿨 라이트/뮤트/브라이트, 가을웜 뮤트/스트롱/딥, 겨울쿨 브라이트/스트롱/딥 등) 중 하나로 진단하세요.
+얼굴이 잘 보이지 않는 사진이면 is_face를 false로 하고 나머지는 빈 값 대신 임의의 기본값을 넣으세요.
+말투는 밝고 다정하게, 사용자의 매력을 칭찬하는 톤으로 작성하세요. 모든 텍스트는 한국어.`;
+
+const OX_SCHEMA={
+  type:"object",
+  properties:{
+    item:{type:"string",description:"사진 속 아이템/컬러가 무엇인지 한 문장"},
+    verdict:{type:"string",enum:["O","X","triangle"],description:"O=찰떡, X=비추, triangle=조건부"},
+    score:{type:"integer",description:"어울림 점수 0~100"},
+    reason:{type:"string",description:"판정 이유 2~3문장, 다정한 말투"}
+  },
+  required:["item","verdict","score","reason"],
+  additionalProperties:false
+};
+
+/* ---------- image helpers ---------- */
+function fileToResizedDataURL(file,maxSide=1024){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const scale=Math.min(1,maxSide/Math.max(img.width,img.height));
+      const c=document.createElement("canvas");
+      c.width=Math.round(img.width*scale); c.height=Math.round(img.height*scale);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+      resolve(c.toDataURL("image/jpeg",0.88));
+    };
+    img.onerror=reject;
+    img.src=URL.createObjectURL(file);
+  });
+}
+function dataURLParts(dataURL){
+  const [head,b64]=dataURL.split(",");
+  return {media:head.match(/data:(.*?);/)[1], b64};
+}
+
+/* =====================================================
+   TAB 1 — scan & diagnose
+===================================================== */
+let selfieDataURL=null, camStream=null, diagnosis=LS.get("tc_diag",null);
+
+$("#btnUpload").addEventListener("click",()=>$("#fileInput").click());
+$("#fileInput").addEventListener("change",async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  stopCamera();
+  selfieDataURL=await fileToResizedDataURL(f);
+  showPreview(selfieDataURL);
+});
+
+$("#btnCamera").addEventListener("click",async ()=>{
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:false});
+    const v=$("#camVideo"); v.srcObject=camStream;
+    v.classList.remove("hidden");
+    $("#previewImg").classList.add("hidden");
+    $("#previewEmpty").classList.add("hidden");
+    $("#btnShoot").classList.remove("hidden");
+  }catch(e){ toast("카메라 접근이 거부됐어요. 앨범 업로드를 이용해 주세요."); }
+});
+$("#btnShoot").addEventListener("click",()=>{
+  const v=$("#camVideo");
+  const c=document.createElement("canvas");
+  const scale=Math.min(1,1024/Math.max(v.videoWidth,v.videoHeight));
+  c.width=v.videoWidth*scale; c.height=v.videoHeight*scale;
+  const ctx=c.getContext("2d");
+  ctx.translate(c.width,0); ctx.scale(-1,1); // mirror
+  ctx.drawImage(v,0,0,c.width,c.height);
+  selfieDataURL=c.toDataURL("image/jpeg",0.88);
+  const fl=$("#flash"); fl.classList.remove("go"); void fl.offsetWidth; fl.classList.add("go");
+  stopCamera();
+  showPreview(selfieDataURL);
+});
+function stopCamera(){
+  if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
+  $("#camVideo").classList.add("hidden");
+  $("#btnShoot").classList.add("hidden");
+}
+function showPreview(url){
+  $("#previewImg").src=url;
+  $("#previewImg").classList.remove("hidden");
+  $("#previewEmpty").classList.add("hidden");
+  $("#btnAnalyze").disabled=false;
+  $("#resultBlock").classList.add("hidden");
+}
+
+const LOADING_MSGS=["조명 색온도를 보정하는 중…","피부 언더톤을 읽는 중…","머리카락·눈동자 대비를 분석 중…","12타입 중 최적 톤을 찾는 중…","베스트 컬러 팔레트를 조합 중…"];
+let loadTimer=null;
+function startLoading(){
+  $("#scanOverlay").classList.remove("hidden");
+  $("#btnAnalyze").disabled=true;
+  $("#btnAnalyze").innerHTML='<span class="spinner"></span>분석 중…';
+  let i=0;
+  $("#loadingMsg").textContent=LOADING_MSGS[0];
+  loadTimer=setInterval(()=>{ i=(i+1)%LOADING_MSGS.length; $("#loadingMsg").textContent=LOADING_MSGS[i]; },1800);
+}
+function stopLoading(){
+  clearInterval(loadTimer);
+  $("#scanOverlay").classList.add("hidden");
+  $("#loadingMsg").textContent="";
+  $("#btnAnalyze").disabled=false;
+  $("#btnAnalyze").textContent="AI 진단 시작";
+}
+
+$("#btnAnalyze").addEventListener("click",async ()=>{
+  const key=requireKey(); if(!key) return;
+  if(!selfieDataURL){ toast("먼저 사진을 준비해 주세요"); return; }
+  startLoading();
+  try{
+    const {media,b64}=dataURLParts(selfieDataURL);
+    const result=await callClaude(key,[
+      {type:"image",source:{type:"base64",media_type:media,data:b64}},
+      {type:"text",text:DIAG_PROMPT}
+    ],DIAG_SCHEMA,4096);
+    if(!result.is_face) throw new Error("얼굴이 잘 보이지 않아요. 정면 얼굴이 크게 나온 사진으로 다시 시도해 주세요.");
+    diagnosis=result;
+    LS.set("tc_diag",diagnosis);
+    renderResult();
+    toast("진단 완료! 🎉");
+  }catch(e){
+    toast(e.message||"분석에 실패했어요. 잠시 후 다시 시도해 주세요.");
+  }finally{
+    stopLoading();
+  }
+});
+$("#btnRetry").addEventListener("click",()=>{
+  $("#resultBlock").classList.add("hidden");
+  window.scrollTo({top:0,behavior:"smooth"});
+});
+
+function renderResult(){
+  const d=diagnosis; if(!d) return;
+  $("#rSeason").textContent=`#${d.season.replace(/\s+/g,"_")}`;
+  $("#rTags").innerHTML=d.hashtags.map(h=>`<span>${esc(h)}</span>`).join("");
+  $("#rConfBar").style.width=`${d.confidence}%`;
+  $("#rConfTxt").textContent=`AI 확신도 ${d.confidence}% · ${d.lighting_note}`;
+  $("#rFeatures").innerHTML=d.features.map(f=>`<li>${esc(f)}</li>`).join("");
+  $("#rCelebs").innerHTML=d.celebrities.map(c=>`<span class="chip on">${esc(c)}</span>`).join("");
+  $("#rBest").innerHTML=d.best_colors.map(c=>`<div class="swatch" style="background:${esc(c.hex)}"><b>${esc(c.name)}</b></div>`).join("");
+  $("#rWorst").innerHTML=d.worst_colors.map(c=>`<div class="swatch" style="background:${esc(c.hex)}"><b>${esc(c.name)}</b></div>`).join("");
+  $("#rTips").textContent=d.tips;
+  $("#resultBlock").classList.remove("hidden");
+  drawCard(currentTpl);
+  $("#matchIntro").textContent=`진단 결과 [${d.season}] 기준으로 매칭해 드려요.`;
+  setTimeout(()=>$("#resultBlock").scrollIntoView({behavior:"smooth"}),150);
+}
+function esc(s){ return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+
+/* ---------- SNS card canvas ---------- */
+let currentTpl="magazine";
+$$(".tpl-pick button").forEach(b=>b.addEventListener("click",()=>{
+  $$(".tpl-pick button").forEach(x=>x.classList.remove("on"));
+  b.classList.add("on");
+  currentTpl=b.dataset.tpl;
+  drawCard(currentTpl);
+}));
+
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+function drawCover(ctx,img,x,y,w,h){
+  const ir=img.width/img.height, r=w/h;
+  let sw,sh,sx,sy;
+  if(ir>r){ sh=img.height; sw=sh*r; sx=(img.width-sw)/2; sy=0; }
+  else{ sw=img.width; sh=sw/r; sx=0; sy=(img.height-sh)/2; }
+  ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h);
+}
+
+function drawCard(tpl){
+  const d=diagnosis; if(!d||!selfieDataURL) return;
+  const cv=$("#cardCanvas"), ctx=cv.getContext("2d");
+  const W=1080,H=1920;
+  const img=new Image();
+  img.onload=()=>{
+    ctx.clearRect(0,0,W,H);
+    if(tpl==="magazine") drawMagazine(ctx,img,d,W,H);
+    else drawPhotocard(ctx,img,d,W,H);
+  };
+  img.src=selfieDataURL;
+}
+
+function drawMagazine(ctx,img,d,W,H){
+  /* cream editorial magazine cover */
+  const bg=ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,"#f6f1e8"); bg.addColorStop(1,"#efe4d8");
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+
+  ctx.fillStyle="#2b2320";
+  ctx.font="900 110px 'Noto Serif KR',serif";
+  ctx.textAlign="center";
+  ctx.fillText("TONE",W/2,150);
+  ctx.font="300 34px 'Noto Sans KR',sans-serif";
+  ctx.letterSpacing="14px";
+  ctx.fillText("PERSONAL COLOR EDITION",W/2,205);
+  ctx.letterSpacing="0px";
+
+  /* photo */
+  ctx.save();
+  roundRect(ctx,90,260,W-180,1060,36); ctx.clip();
+  drawCover(ctx,img,90,260,W-180,1060);
+  const ov=ctx.createLinearGradient(0,900,0,1320);
+  ov.addColorStop(0,"rgba(43,35,32,0)"); ov.addColorStop(1,"rgba(43,35,32,.55)");
+  ctx.fillStyle=ov; ctx.fillRect(90,260,W-180,1060);
+  ctx.restore();
+  ctx.strokeStyle="#2b2320"; ctx.lineWidth=3;
+  roundRect(ctx,90,260,W-180,1060,36); ctx.stroke();
+
+  /* season title */
+  ctx.fillStyle="#fff";
+  ctx.font="900 76px 'Noto Serif KR',serif";
+  ctx.fillText(d.season,W/2,1220);
+  ctx.font="italic 34px 'Noto Serif KR',serif";
+  ctx.fillText(d.season_en,W/2,1278);
+
+  /* hashtags */
+  ctx.fillStyle="#8c5f4a";
+  ctx.font="700 40px 'Noto Sans KR',sans-serif";
+  ctx.fillText(d.hashtags.join("  "),W/2,1400);
+
+  /* palette strip */
+  const colors=d.best_colors.slice(0,8);
+  const pw=(W-180)/colors.length;
+  colors.forEach((c,i)=>{
+    ctx.fillStyle=c.hex;
+    roundRect(ctx,90+i*pw+6,1450,pw-12,150,20); ctx.fill();
+    ctx.strokeStyle="rgba(43,35,32,.25)"; ctx.lineWidth=2; ctx.stroke();
+  });
+  ctx.fillStyle="#2b2320";
+  ctx.font="500 30px 'Noto Sans KR',sans-serif";
+  ctx.fillText("MY BEST COLOR PALETTE",W/2,1670);
+
+  ctx.font="300 28px 'Noto Sans KR',sans-serif";
+  ctx.fillStyle="#7a6a5e";
+  ctx.fillText("AI COLORIST · TONECHECK",W/2,1810);
+}
+
+function drawPhotocard(ctx,img,d,W,H){
+  /* glossy idol photocard on holo-ish gradient */
+  const bg=ctx.createLinearGradient(0,0,W,H);
+  bg.addColorStop(0,"#1a1420"); bg.addColorStop(.5,"#2a1f38"); bg.addColorStop(1,"#141019");
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+  /* sparkle dots */
+  for(let i=0;i<80;i++){
+    ctx.fillStyle=`rgba(255,255,255,${Math.random()*.5})`;
+    ctx.beginPath();
+    ctx.arc(Math.random()*W,Math.random()*H,Math.random()*3+1,0,7);
+    ctx.fill();
+  }
+  ctx.textAlign="center";
+  ctx.fillStyle="#e8b4c8";
+  ctx.font="700 40px 'Noto Sans KR',sans-serif";
+  ctx.letterSpacing="10px";
+  ctx.fillText("OFFICIAL PHOTOCARD",W/2,140);
+  ctx.letterSpacing="0px";
+
+  /* card frame */
+  const cx=140,cy=220,cw=W-280,ch=1150;
+  ctx.save();
+  roundRect(ctx,cx,cy,cw,ch,48); ctx.clip();
+  drawCover(ctx,img,cx,cy,cw,ch);
+  ctx.restore();
+  const frame=ctx.createLinearGradient(cx,cy,cx+cw,cy+ch);
+  frame.addColorStop(0,"#e8b4c8"); frame.addColorStop(.5,"#c9a7eb"); frame.addColorStop(1,"#e6c98a");
+  ctx.strokeStyle=frame; ctx.lineWidth=10;
+  roundRect(ctx,cx,cy,cw,ch,48); ctx.stroke();
+
+  /* season badge */
+  ctx.fillStyle="rgba(20,16,25,.85)";
+  roundRect(ctx,W/2-330,cy+ch-140,660,100,50); ctx.fill();
+  ctx.strokeStyle=frame; ctx.lineWidth=3;
+  roundRect(ctx,W/2-330,cy+ch-140,660,100,50); ctx.stroke();
+  ctx.fillStyle="#fff";
+  ctx.font="900 48px 'Noto Sans KR',sans-serif";
+  ctx.fillText(d.season,W/2,cy+ch-72);
+
+  /* hashtags */
+  ctx.fillStyle="#c9a7eb";
+  ctx.font="700 42px 'Noto Sans KR',sans-serif";
+  ctx.fillText(d.hashtags.join("  "),W/2,1500);
+
+  /* mini palette hearts */
+  const colors=d.best_colors.slice(0,6);
+  const total=colors.length*110;
+  colors.forEach((c,i)=>{
+    const x=W/2-total/2+i*110+55, y=1600;
+    ctx.fillStyle=c.hex;
+    ctx.beginPath(); ctx.arc(x,y,42,0,7); ctx.fill();
+    ctx.strokeStyle="rgba(255,255,255,.35)"; ctx.lineWidth=3; ctx.stroke();
+  });
+
+  ctx.fillStyle="rgba(255,255,255,.55)";
+  ctx.font="300 30px 'Noto Sans KR',sans-serif";
+  ctx.fillText("TONECHECK ✦ AI PERSONAL COLOR",W/2,1790);
+}
+
+async function cardBlob(){
+  return new Promise(res=>$("#cardCanvas").toBlob(res,"image/png"));
+}
+$("#btnSaveCard").addEventListener("click",async ()=>{
+  const blob=await cardBlob(); if(!blob) return;
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`tonecheck_${Date.now()}.png`;
+  a.click();
+  toast("카드가 저장됐어요 📥");
+});
+$("#btnShareCard").addEventListener("click",async ()=>{
+  const blob=await cardBlob(); if(!blob) return;
+  const file=new File([blob],"tonecheck.png",{type:"image/png"});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file],title:"내 퍼스널컬러",text:`나는 ${diagnosis.season}! ${diagnosis.hashtags.join(" ")} #톤체크`}); }
+    catch(e){/* user cancelled */}
+  }else{
+    $("#btnSaveCard").click();
+    toast("이 브라우저는 공유 미지원 — 이미지로 저장했어요");
+  }
+});
+
+/* =====================================================
+   TAB 2 — match
+===================================================== */
+/* 큐레이션 인기템 데이터 (실서비스에선 올리브영/무신사/지그재그 크롤링 파이프라인으로 대체) */
+const PRODUCTS=[
+  {emoji:"💋",bg:"#c94f5e",brand:"롬앤",name:"쥬시 래스팅 틴트 06 피그피그",price:"9,900원",tones:{warm:["best","가을 딥·뮤트에 착붙는 무화과 브라운레드"],cool:["worst","붉은 갈색기가 쿨톤 피부를 칙칙하게 만들어요"]}},
+  {emoji:"💋",bg:"#e8698a",brand:"페리페라",name:"잉크무드 글로이 틴트 03",price:"8,800원",tones:{warm:["worst","푸른기 도는 핑크라 웜톤엔 겉돌아요"],cool:["best","여름쿨 라이트 인생템으로 유명한 청귤핑크"]}},
+  {emoji:"🍑",bg:"#e89a6b",brand:"클리오",name:"프로 아이 팔레트 코랄 토크",price:"34,000원",tones:{warm:["best","봄웜 대표 코랄·피치 조합"],cool:["soso","브라운 위주로만 쓰면 무난하게 소화 가능"]}},
+  {emoji:"✨",bg:"#b8a0d9",brand:"데이지크",name:"섀도우 팔레트 라벤더 무드",price:"32,000원",tones:{warm:["worst","라벤더 펄이 웜 피부를 창백하게 보이게 해요"],cool:["best","겨울쿨·여름쿨 모두 소화하는 라일락 무드"]}},
+  {emoji:"🌸",bg:"#e5b3c4",brand:"어뮤즈",name:"립 블러쉬 로지 톤업",price:"22,000원",tones:{warm:["soso","MLBB로는 무난, 발색 강하게는 비추"],cool:["best","은은한 로지빛이 쿨 피부 투명도를 올려줘요"]}},
+  {emoji:"🧡",bg:"#d97742",brand:"에뛰드",name:"베이크 하우스 팔레트",price:"25,000원",tones:{warm:["best","가을웜 스트롱 최적 베이크드 브라운"],cool:["worst","노란기 브라운이 쿨톤엔 병약해 보일 수 있어요"]}},
+  {emoji:"💅",bg:"#8f1d2c",brand:"헤라",name:"센슈얼 파우더 매트 339",price:"38,000원",tones:{warm:["soso","MLBB용으론 가능하지만 딥레드 계열이 더 착붙"],cool:["best","겨울쿨 브라이트의 정석 버건디"]}},
+  {emoji:"🤎",bg:"#a5713f",brand:"미샤",name:"글로우 쿠션 카라멜 베이지",price:"19,800원",tones:{warm:["best","웜 언더톤과 자연스럽게 붙는 옐로베이스"],cool:["worst","쿨톤엔 한 톤 어둡고 노랗게 떠요"]}}
+];
+function myToneGroup(){
+  if(!diagnosis) return null;
+  return /웜|봄|가을/.test(diagnosis.season)?"warm":"cool";
+}
+function renderProducts(){
+  const g=myToneGroup();
+  const list=$("#prodList");
+  list.innerHTML=PRODUCTS.map(p=>{
+    let v="",cls="soso",label="진단 후 확인";
+    if(g){ [cls,v]=p.tones[g]; label=cls==="best"?"BEST 👍":cls==="worst"?"WORST 🙅":"무난 🙂"; }
+    return `<div class="prod">
+      <div class="thumb" style="background:${p.bg}22;border-color:${p.bg}55">${p.emoji}</div>
+      <div class="info">
+        <div class="brand">${p.brand}</div>
+        <div class="name">${p.name}</div>
+        <div class="price">${p.price}</div>
+        ${g?`<div class="sub" style="font-size:11px;margin-top:3px">${esc(v)}</div>`:""}
+      </div>
+      <div class="verdict ${cls}">${label}</div>
+    </div>`;
+  }).join("");
+  if(diagnosis) $("#matchIntro").textContent=`진단 결과 [${diagnosis.season}] 기준으로 매칭해 드려요.`;
+}
+
+/* ---- O/X pouch check ---- */
+let oxDataURL=null;
+$("#btnOxUpload").addEventListener("click",()=>$("#oxFile").click());
+$("#oxFile").addEventListener("change",async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  oxDataURL=await fileToResizedDataURL(f,900);
+  $("#oxImg").src=oxDataURL;
+  $("#oxImg").classList.remove("hidden");
+  $("#oxEmpty").classList.add("hidden");
+  $("#btnOxCheck").disabled=false;
+  $("#oxResult").classList.add("hidden");
+});
+$("#btnOxCheck").addEventListener("click",async ()=>{
+  const key=requireKey(); if(!key) return;
+  if(!diagnosis){ toast("먼저 [AI 스캔] 탭에서 퍼스널컬러 진단을 받아 주세요!"); return; }
+  if(!oxDataURL) return;
+  $("#oxScan").classList.remove("hidden");
+  $("#btnOxCheck").disabled=true;
+  $("#btnOxCheck").innerHTML='<span class="spinner"></span>판별 중…';
+  try{
+    const {media,b64}=dataURLParts(oxDataURL);
+    const r=await callClaude(key,[
+      {type:"image",source:{type:"base64",media_type:media,data:b64}},
+      {type:"text",text:`사용자의 퍼스널컬러는 [${diagnosis.season}]입니다. 사진 속 화장품 색상(또는 염색 컬러/의류 색상)이 이 톤과 어울리는지 전문 컬러리스트로서 판별하세요. 조명 영향을 감안해 실제 색을 추정한 뒤 판단하세요. 모든 텍스트는 한국어, 다정한 말투.`}
+    ],OX_SCHEMA,2048);
+    const mark=$("#oxMark");
+    mark.textContent=r.verdict==="O"?"O":r.verdict==="X"?"X":"△";
+    mark.className="mark "+(r.verdict==="O"?"o":r.verdict==="X"?"x":"");
+    $("#oxTitle").textContent=`${r.item} · ${r.score}점`;
+    $("#oxReason").textContent=r.reason;
+    $("#oxResult").classList.remove("hidden");
+  }catch(e){
+    toast(e.message||"판별에 실패했어요");
+  }finally{
+    $("#oxScan").classList.add("hidden");
+    $("#btnOxCheck").disabled=false;
+    $("#btnOxCheck").textContent="O/X 판별";
+  }
+});
+
+/* =====================================================
+   TAB 3 — community
+===================================================== */
+const BOARDS=["전체","봄웜","여름쿨","가을웜","겨울쿨"];
+let currentBoard="전체";
+const SEED_POSTS=[
+  {id:1,nick:"복숭아요거트",tone:"봄웜",emoji:"🍑",time:"10분 전",body:"봄웜 브라이트 모여라~ 롬앤 04 비포선셋 진짜 인생템입니다. 발색 순간 광명 그 자체 ✨",likes:24},
+  {id:2,nick:"민트초코공주",tone:"여름쿨",emoji:"🩵",time:"32분 전",body:"여름쿨 뮤트인데 회색기 도는 라벤더 니트 샀다가 인생 첫 '오늘 안색 좋다' 소리 들었어요… 뮤트들 채도 낮은 거 꼭 시도해봐요",likes:41},
+  {id:3,nick:"단풍구경",tone:"가을웜",emoji:"🍁",time:"1시간 전",body:"가을 딥은 머리 무조건 초코브라운입니다. 애쉬 하지 마세요 저처럼 3개월 후회함 🥲",likes:57},
+  {id:4,nick:"겨울왕국",tone:"겨울쿨",emoji:"❄️",time:"2시간 전",body:"겨울쿨톤 인생 립스틱 추천 좀!! 헤라 339는 갖고 있고 좀 더 밝은 푸시아 계열 찾는 중",likes:13},
+  {id:5,nick:"토마토주스",tone:"봄웜",emoji:"🍅",time:"3시간 전",body:"방금 이 앱으로 진단받고 옴. 20만원 아꼈다는 생각뿐… 카드 인스타 스토리 올렸더니 친구들 다 하고 있음 ㅋㅋ",likes:88}
+];
+function getPosts(){ return LS.get("tc_posts",SEED_POSTS); }
+function savePosts(p){ LS.set("tc_posts",p); }
+
+function renderBoardChips(){
+  $("#boardChips").innerHTML=BOARDS.map(b=>`<span class="chip ${b===currentBoard?"on":""}" data-b="${b}">${b==="전체"?"🌈 전체":b+" 모여라"}</span>`).join("");
+  $$("#boardChips .chip").forEach(c=>c.addEventListener("click",()=>{
+    currentBoard=c.dataset.b; renderBoardChips(); renderPosts();
+  }));
+}
+function renderPosts(){
+  renderBoardChips();
+  const liked=LS.get("tc_liked",[]);
+  const posts=getPosts().filter(p=>currentBoard==="전체"||p.tone===currentBoard);
+  $("#postList").innerHTML=posts.length?posts.map(p=>`
+    <div class="post">
+      <div class="meta">
+        <div class="avatar">${p.emoji}</div>
+        <div>
+          <div class="nick">${esc(p.nick)}</div>
+          <span class="tone-badge">${esc(p.tone)}</span>
+        </div>
+        <div class="time">${esc(p.time)}</div>
+      </div>
+      <div class="body">${esc(p.body)}</div>
+      <div class="actions">
+        <button data-like="${p.id}" class="${liked.includes(p.id)?"liked":""}">♥ ${p.likes}</button>
+      </div>
+    </div>`).join(""):'<p class="sub" style="text-align:center;padding:30px 0">아직 글이 없어요. 첫 글을 남겨보세요!</p>';
+  $$("#postList [data-like]").forEach(b=>b.addEventListener("click",()=>{
+    const id=+b.dataset.like;
+    const posts=getPosts();
+    const liked=LS.get("tc_liked",[]);
+    const p=posts.find(x=>x.id===id); if(!p) return;
+    if(liked.includes(id)){ p.likes--; liked.splice(liked.indexOf(id),1); }
+    else{ p.likes++; liked.push(id); }
+    savePosts(posts); LS.set("tc_liked",liked);
+    renderPosts();
+  }));
+}
+$("#btnPost").addEventListener("click",()=>{
+  const txt=$("#postInput").value.trim();
+  if(!txt){ toast("내용을 입력해 주세요"); return; }
+  const tone=diagnosis?(/봄/.test(diagnosis.season)?"봄웜":/여름/.test(diagnosis.season)?"여름쿨":/가을/.test(diagnosis.season)?"가을웜":"겨울쿨"):"봄웜";
+  const posts=getPosts();
+  posts.unshift({id:Date.now(),nick:"나",tone,emoji:"🙋",time:"방금",body:txt,likes:0});
+  savePosts(posts);
+  $("#postInput").value="";
+  renderPosts();
+  toast("글이 등록됐어요 ✍️");
+});
+
+/* ---------- init ---------- */
+if(diagnosis){
+  /* 이전 진단이 있으면 매칭탭 문구만 갱신 (사진은 세션에 없으므로 카드 재생성은 새 진단 시) */
+  $("#matchIntro").textContent=`진단 결과 [${diagnosis.season}] 기준으로 매칭해 드려요.`;
+}
+renderProducts();
+renderPosts();
+</script>
+</body>
+</html>
