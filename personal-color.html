@@ -364,7 +364,10 @@ $("#btnSettings").addEventListener("click",()=>{
 $("#btnCloseSettings").addEventListener("click",()=>$("#settingsModal").classList.add("hidden"));
 $("#btnSaveProxy").addEventListener("click",()=>{
   let u=$("#proxyUrlInput").value.trim().replace(/\/+$/,"");
-  if(!/^https:\/\/.+/.test(u)){ toast("https:// 로 시작하는 프록시 주소를 입력해 주세요"); return; }
+  // 운영은 https 필수, 로컬 테스트(wrangler dev)용 localhost만 http 허용
+  if(!/^https:\/\/.+/.test(u) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(u)){
+    toast("https:// 로 시작하는 프록시 주소를 입력해 주세요"); return;
+  }
   LS.set("tc_proxy",u);
   $("#settingsModal").classList.add("hidden");
   toast("서버 주소가 저장됐어요 ✅");
