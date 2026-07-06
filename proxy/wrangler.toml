@@ -1,0 +1,20 @@
+name = "tonecheck-proxy"
+main = "src/index.js"
+compatibility_date = "2026-06-01"
+
+# 브라우저에서 이 프록시를 호출할 수 있는 출처 목록 (쉼표 구분).
+# 배포 도메인 외의 사이트가 이 프록시를 몰래 가져다 쓰는 것을 막는다.
+# 로컬 개발 시에만 localhost 항목을 유지하고, 운영 배포 전에는 제거를 권장.
+[vars]
+ALLOWED_ORIGINS = "https://cruisedive.com,https://www.cruisedive.com,https://nodynody.github.io,http://localhost:8000"
+
+# IP당 분당 10회 속도 제한 (Cloudflare Workers Rate Limiting 바인딩)
+[[unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
+# ⚠️ ANTHROPIC_API_KEY는 절대 이 파일에 쓰지 않는다.
+# 반드시 시크릿으로 등록할 것:
+#   npx wrangler secret put ANTHROPIC_API_KEY

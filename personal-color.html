@@ -168,7 +168,7 @@ ul.feat li::before{content:"✦";position:absolute;left:2px;color:var(--accent2)
 
 <header>
   <div class="logo">TONE<em>CHECK</em> ✦</div>
-  <button class="gear" id="btnSettings">⚙ API 키</button>
+  <button class="gear" id="btnSettings">⚙ 서버 설정</button>
 </header>
 
 <main>
@@ -313,12 +313,12 @@ ul.feat li::before{content:"✦";position:absolute;left:2px;color:var(--accent2)
 <!-- ============ settings modal ============ -->
 <div class="modal hidden" id="settingsModal">
   <div class="inner">
-    <h3>Claude API 키 설정</h3>
-    <p class="sub" style="margin-top:8px">AI 진단은 Anthropic Claude 비전 API를 사용합니다. <a href="https://console.anthropic.com/" target="_blank" style="color:var(--accent2)">console.anthropic.com</a>에서 발급한 키를 입력하세요.<br><br>⚠️ 키는 이 기기 브라우저(localStorage)에만 저장되며 Anthropic API 외 어디에도 전송되지 않아요.</p>
-    <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
+    <h3>진단 서버 설정</h3>
+    <p class="sub" style="margin-top:8px">AI 진단은 전용 프록시 서버를 통해 동작해요. API 키는 서버에만 보관되고 이 앱에는 존재하지 않습니다.<br><br>배포된 프록시 주소(Cloudflare Worker)를 입력해 주세요. 자세한 배포 방법은 저장소의 <b>proxy/README.md</b> 참고.</p>
+    <input type="url" id="proxyUrlInput" placeholder="https://tonecheck-proxy.****.workers.dev">
     <div class="row2">
       <button class="btn ghost" id="btnCloseSettings">닫기</button>
-      <button class="btn" id="btnSaveKey">저장</button>
+      <button class="btn" id="btnSaveProxy">저장</button>
     </div>
   </div>
 </div>
@@ -351,97 +351,48 @@ $$("nav button").forEach(b=>b.addEventListener("click",()=>{
   if(b.dataset.tab==="comm") renderPosts();
 }));
 
-/* ---------- API key ---------- */
+/* ---------- proxy server ----------
+   API 키는 이 앱 어디에도 없다. 모든 AI 호출은 전용 프록시(Cloudflare Worker)를
+   경유하며, 키는 프록시의 Secret에만 존재한다. (배포 방법: proxy/README.md)
+   배포 후 아래 DEFAULT_PROXY에 워커 주소를 넣으면 사용자는 설정 없이 바로 쓸 수 있다. */
+const DEFAULT_PROXY="";
+
 $("#btnSettings").addEventListener("click",()=>{
-  $("#apiKeyInput").value = LS.get("tc_api_key","");
+  $("#proxyUrlInput").value = LS.get("tc_proxy",DEFAULT_PROXY);
   $("#settingsModal").classList.remove("hidden");
 });
 $("#btnCloseSettings").addEventListener("click",()=>$("#settingsModal").classList.add("hidden"));
-$("#btnSaveKey").addEventListener("click",()=>{
-  const k=$("#apiKeyInput").value.trim();
-  if(!k.startsWith("sk-ant")){ toast("올바른 Anthropic API 키를 입력해 주세요"); return; }
-  LS.set("tc_api_key",k);
+$("#btnSaveProxy").addEventListener("click",()=>{
+  let u=$("#proxyUrlInput").value.trim().replace(/\/+$/,"");
+  if(!/^https:\/\/.+/.test(u)){ toast("https:// 로 시작하는 프록시 주소를 입력해 주세요"); return; }
+  LS.set("tc_proxy",u);
   $("#settingsModal").classList.add("hidden");
-  toast("API 키가 저장됐어요 ✅");
+  toast("서버 주소가 저장됐어요 ✅");
 });
-function requireKey(){
-  const k=LS.get("tc_api_key","");
-  if(!k){ toast("먼저 우측 상단 ⚙에서 API 키를 등록해 주세요"); $("#settingsModal").classList.remove("hidden"); return null; }
-  return k;
+function requireProxy(){
+  const u=LS.get("tc_proxy",DEFAULT_PROXY);
+  if(!u){ toast("먼저 우측 상단 ⚙에서 진단 서버 주소를 등록해 주세요"); $("#settingsModal").classList.remove("hidden"); return null; }
+  return u;
 }
 
-/* ---------- Claude Vision API ---------- */
-const API_URL="https://api.anthropic.com/v1/messages";
-const MODEL="claude-opus-4-8";
-
-async function callClaude(key, blocks, schema, maxTokens){
-  const res = await fetch(API_URL,{
-    method:"POST",
-    headers:{
-      "content-type":"application/json",
-      "x-api-key":key,
-      "anthropic-version":"2023-06-01",
-      "anthropic-dangerous-direct-browser-access":"true"
-    },
-    body:JSON.stringify({
-      model:MODEL,
-      max_tokens:maxTokens,
-      output_config:{format:{type:"json_schema",schema}},
-      messages:[{role:"user",content:blocks}]
-    })
-  });
-  if(!res.ok){
-    const err=await res.json().catch(()=>({}));
-    throw new Error(err?.error?.message || `API 오류 (${res.status})`);
+async function callProxy(path,payload){
+  const base=requireProxy();
+  if(!base) throw new Error("진단 서버가 설정되지 않았어요.");
+  let res;
+  try{
+    res=await fetch(base+path,{
+      method:"POST",
+      headers:{"content-type":"application/json"},
+      body:JSON.stringify(payload)
+    });
+  }catch(e){
+    throw new Error("서버에 연결할 수 없어요. 주소를 확인해 주세요.");
   }
-  const data=await res.json();
-  if(data.stop_reason==="refusal") throw new Error("이 이미지는 분석할 수 없어요. 다른 사진으로 시도해 주세요.");
-  const text=(data.content||[]).find(b=>b.type==="text");
-  if(!text) throw new Error("응답을 해석하지 못했어요.");
-  return JSON.parse(text.text);
+  const data=await res.json().catch(()=>null);
+  if(!res.ok) throw new Error((data&&data.error)||`서버 오류 (${res.status})`);
+  if(!data) throw new Error("응답을 해석하지 못했어요.");
+  return data;
 }
-
-/* structured output schema : diagnosis */
-const DIAG_SCHEMA={
-  type:"object",
-  properties:{
-    is_face:{type:"boolean",description:"사람 얼굴이 충분히 보이는 사진인지"},
-    season:{type:"string",description:"12타입 한국어 명칭. 예: 가을 뮤트 소프트, 봄 웜 라이트"},
-    season_en:{type:"string",description:"영문 표기. 예: Autumn Mute Soft"},
-    hashtags:{type:"array",items:{type:"string"},description:"# 포함 감성 해시태그 3개. 예: #밀크티 #생기발랄 #인간비타민"},
-    confidence:{type:"integer",description:"진단 확신도 0~100"},
-    lighting_note:{type:"string",description:"사진의 조명 상태와 그것을 어떻게 보정해 판단했는지 한 문장"},
-    features:{type:"array",items:{type:"string"},description:"이 톤의 핵심 특징 4가지, 사진에서 관찰한 근거 포함"},
-    celebrities:{type:"array",items:{type:"string"},description:"같은 톤으로 알려진 한국 연예인 4명"},
-    best_colors:{type:"array",items:{type:"object",properties:{name:{type:"string"},hex:{type:"string"}},required:["name","hex"],additionalProperties:false},description:"베스트 컬러 8개"},
-    worst_colors:{type:"array",items:{type:"object",properties:{name:{type:"string"},hex:{type:"string"}},required:["name","hex"],additionalProperties:false},description:"워스트 컬러 4개"},
-    tips:{type:"string",description:"메이크업/헤어/패션 스타일 팁 3~4문장"}
-  },
-  required:["is_face","season","season_en","hashtags","confidence","lighting_note","features","celebrities","best_colors","worst_colors","tips"],
-  additionalProperties:false
-};
-
-const DIAG_PROMPT=`당신은 20만 원짜리 오프라인 퍼스널컬러 진단에 준하는 분석을 제공하는 전문 컬러리스트입니다.
-이 셀카를 단순 RGB 수치가 아니라 시각적 맥락 전체로 분석하세요:
-1) 조명(색온도, 방향, 강도)을 먼저 파악하고 그 영향을 머릿속에서 보정한 뒤 판단할 것
-2) 피부의 언더톤(웜/쿨), 명도, 채도 수용력
-3) 머리카락·눈동자·눈썹의 고유 색과 피부와의 대비감
-4) 얼굴 전체의 인상(선명/부드러움)
-이를 종합해 12타입 퍼스널컬러(봄웜 라이트/브라이트, 여름쿨 라이트/뮤트/브라이트, 가을웜 뮤트/스트롱/딥, 겨울쿨 브라이트/스트롱/딥 등) 중 하나로 진단하세요.
-얼굴이 잘 보이지 않는 사진이면 is_face를 false로 하고 나머지는 빈 값 대신 임의의 기본값을 넣으세요.
-말투는 밝고 다정하게, 사용자의 매력을 칭찬하는 톤으로 작성하세요. 모든 텍스트는 한국어.`;
-
-const OX_SCHEMA={
-  type:"object",
-  properties:{
-    item:{type:"string",description:"사진 속 아이템/컬러가 무엇인지 한 문장"},
-    verdict:{type:"string",enum:["O","X","triangle"],description:"O=찰떡, X=비추, triangle=조건부"},
-    score:{type:"integer",description:"어울림 점수 0~100"},
-    reason:{type:"string",description:"판정 이유 2~3문장, 다정한 말투"}
-  },
-  required:["item","verdict","score","reason"],
-  additionalProperties:false
-};
 
 /* ---------- image helpers ---------- */
 function fileToResizedDataURL(file,maxSide=1024){
@@ -531,15 +482,12 @@ function stopLoading(){
 }
 
 $("#btnAnalyze").addEventListener("click",async ()=>{
-  const key=requireKey(); if(!key) return;
+  if(!requireProxy()) return;
   if(!selfieDataURL){ toast("먼저 사진을 준비해 주세요"); return; }
   startLoading();
   try{
     const {media,b64}=dataURLParts(selfieDataURL);
-    const result=await callClaude(key,[
-      {type:"image",source:{type:"base64",media_type:media,data:b64}},
-      {type:"text",text:DIAG_PROMPT}
-    ],DIAG_SCHEMA,4096);
+    const result=await callProxy("/diagnose",{image:{media_type:media,data:b64}});
     if(!result.is_face) throw new Error("얼굴이 잘 보이지 않아요. 정면 얼굴이 크게 나온 사진으로 다시 시도해 주세요.");
     diagnosis=result;
     LS.set("tc_diag",diagnosis);
@@ -801,7 +749,7 @@ $("#oxFile").addEventListener("change",async e=>{
   $("#oxResult").classList.add("hidden");
 });
 $("#btnOxCheck").addEventListener("click",async ()=>{
-  const key=requireKey(); if(!key) return;
+  if(!requireProxy()) return;
   if(!diagnosis){ toast("먼저 [AI 스캔] 탭에서 퍼스널컬러 진단을 받아 주세요!"); return; }
   if(!oxDataURL) return;
   $("#oxScan").classList.remove("hidden");
@@ -809,10 +757,7 @@ $("#btnOxCheck").addEventListener("click",async ()=>{
   $("#btnOxCheck").innerHTML='<span class="spinner"></span>판별 중…';
   try{
     const {media,b64}=dataURLParts(oxDataURL);
-    const r=await callClaude(key,[
-      {type:"image",source:{type:"base64",media_type:media,data:b64}},
-      {type:"text",text:`사용자의 퍼스널컬러는 [${diagnosis.season}]입니다. 사진 속 화장품 색상(또는 염색 컬러/의류 색상)이 이 톤과 어울리는지 전문 컬러리스트로서 판별하세요. 조명 영향을 감안해 실제 색을 추정한 뒤 판단하세요. 모든 텍스트는 한국어, 다정한 말투.`}
-    ],OX_SCHEMA,2048);
+    const r=await callProxy("/oxcheck",{image:{media_type:media,data:b64},season:diagnosis.season});
     const mark=$("#oxMark");
     mark.textContent=r.verdict==="O"?"O":r.verdict==="X"?"X":"△";
     mark.className="mark "+(r.verdict==="O"?"o":r.verdict==="X"?"x":"");

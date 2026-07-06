@@ -1,0 +1,5 @@
+# 로컬 개발용 시크릿 파일 — 절대 커밋 금지
+.dev.vars
+.env
+node_modules/
+.wrangler/
