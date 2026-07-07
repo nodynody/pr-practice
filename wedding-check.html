@@ -265,7 +265,7 @@ dialog input[type=password], dialog input[type=text] { width: 100%; margin: 8px 
     <div id="item-cards"></div>
     <div class="disclaimer">
       <p>ⓘ 본 진단은 한국소비자원 참가격의 결혼서비스 가격 공개 구조(지역별 상위10%·상위25%·평균·하위25%·하위10%)를 기준으로 한 <b>참고 정보</b>이며, 특정 업체에 대한 평가가 아닙니다.</p>
-      <p>ⓘ 현재 내장된 가격 구간은 <b>공개 통계를 바탕으로 한 샘플 추정치</b>입니다. 참가격(price.go.kr) 최신 공표 값으로 교체해 사용하세요. (파일 내 <code>PRICE_DATA</code>)</p>
+      <p>ⓘ 평균·중간값(대관료, 식대, 스드메 패키지)과 주요 지역 배수는 한국소비자원 <b>2026년 2월 결혼서비스 가격 동향 조사</b> 공표값 기준이며, 구간 폭(하위10%~상위10%)과 일부 항목·지역은 <b>추정치</b>입니다. 참가격(price.go.kr) 구간값으로 교체할 수 있습니다. (파일 내 <code>ITEM_DEFS</code>)</p>
       <p>ⓘ 실제 계약 시에는 옵션 구성·보증 인원·시즌 등 조건에 따라 적정 가격이 달라질 수 있습니다.</p>
     </div>
   </section>
@@ -287,40 +287,55 @@ dialog input[type=password], dialog input[type=text] { width: 100%; margin: 8px 
 "use strict";
 
 /* ═══════════════════════════════════════════════════════════════
-   가격 데이터 (샘플 추정치 — 참가격 price.go.kr 공표값으로 교체)
-   각 항목: [하위10%, 하위25%, 평균, 상위25%, 상위10%] 가격(원)
-   지역 배수: venue(예식장 관련) / sdm(스드메 관련)
+   가격 데이터
+   [데이터 출처]
+   - 전국 평균·중간값(대관료 350만, 뷔페 식대 6.2만, 코스 식대 11.9만,
+     한상차림 5.5만, 스드메 패키지 294만)과 지역 배수(강남 1.62, 강남외
+     1.35, 경기 0.89, 충청 0.78, 경상 0.60 등)는 한국소비자원
+     『2026년 2월 결혼서비스 가격 동향 조사』 공표값(언론 보도 인용) 기준.
+   - 구간 폭(하위10%~상위10% 스프레드)과 일부 지역 배수, 스튜디오/드레스/
+     메이크업/옵션 항목은 공개 통계 기반 추정치.
+   - 참가격(price.go.kr) 결혼서비스 > 가격 검색 및 비교 화면의 구간값을
+     확인할 수 있으면 base 배열을 그대로 교체하세요.
+   각 항목 base: [하위10%, 하위25%, 평균, 상위25%, 상위10%] 가격(원)
+   지역 배수 그룹: venue(대관·장식) / meal(식대) / sdm(스드메) / opt(1.0)
    ═══════════════════════════════════════════════════════════════ */
 const ITEM_DEFS = {
-  hall_rental: { label: "대관료",        group: "venue", perPerson: false, base: [1000000, 2500000, 4800000, 7500000, 11000000] },
-  meal:        { label: "식대(1인)",     group: "venue", perPerson: true,  base: [38000, 46000, 58000, 72000, 88000] },
-  decoration:  { label: "기본 장식(꽃)", group: "venue", perPerson: false, base: [600000, 1000000, 1600000, 2300000, 3200000] },
-  studio:      { label: "스튜디오 촬영", group: "sdm",   perPerson: false, base: [600000, 850000, 1170000, 1500000, 1950000] },
-  dress:       { label: "드레스 대여",   group: "sdm",   perPerson: false, base: [800000, 1150000, 1600000, 2100000, 2800000] },
-  makeup:      { label: "메이크업",      group: "sdm",   perPerson: false, base: [350000, 500000, 720000, 950000, 1250000] },
-  sdm_package: { label: "스드메 패키지", group: "sdm",   perPerson: false, base: [2000000, 2700000, 3500000, 4500000, 5800000] },
-  helper:      { label: "헬퍼비",        group: "opt",   perPerson: false, base: [150000, 200000, 250000, 300000, 380000] },
-  originals:   { label: "원본·수정본 구입", group: "opt", perPerson: false, base: [150000, 220000, 330000, 450000, 600000] },
-  dress_extra: { label: "드레스 추가 대여", group: "opt", perPerson: false, base: [300000, 450000, 660000, 900000, 1200000] },
-  album:       { label: "앨범·액자 추가",  group: "opt",  perPerson: false, base: [200000, 300000, 450000, 650000, 900000] },
-  etc:         { label: "기타",          group: "none",  perPerson: false, base: null }
+  hall_rental: { label: "대관료",           group: "venue", perPerson: false, base: [1000000, 2000000, 3500000, 6000000, 9500000] },   // 중간값 350만(실측)
+  meal:        { label: "식대(뷔페·1인)",   group: "meal",  perPerson: true,  base: [45000, 53000, 62000, 75000, 90000] },             // 평균 6.2만(실측)
+  meal_course: { label: "식대(코스·1인)",   group: "meal",  perPerson: true,  base: [85000, 100000, 119000, 140000, 170000] },         // 평균 11.9만(실측)
+  meal_hansang:{ label: "식대(한상·1인)",   group: "meal",  perPerson: true,  base: [40000, 47000, 55000, 66000, 80000] },             // 평균 5.5만(실측)
+  decoration:  { label: "기본 장식(꽃)",    group: "venue", perPerson: false, base: [600000, 1000000, 1600000, 2300000, 3200000] },
+  studio:      { label: "스튜디오 촬영",    group: "sdm",   perPerson: false, base: [550000, 800000, 1100000, 1450000, 1900000] },
+  dress:       { label: "드레스 대여",      group: "sdm",   perPerson: false, base: [750000, 1100000, 1500000, 2000000, 2700000] },
+  makeup:      { label: "메이크업",         group: "sdm",   perPerson: false, base: [350000, 500000, 700000, 930000, 1200000] },
+  sdm_package: { label: "스드메 패키지",    group: "sdm",   perPerson: false, base: [2000000, 2450000, 2940000, 3700000, 4700000] },   // 중간값 294만(실측)
+  helper:      { label: "헬퍼비",           group: "opt",   perPerson: false, base: [150000, 200000, 250000, 300000, 380000] },
+  originals:   { label: "원본·수정본 구입", group: "opt",   perPerson: false, base: [150000, 220000, 330000, 450000, 600000] },
+  dress_extra: { label: "드레스 추가 대여", group: "opt",   perPerson: false, base: [300000, 450000, 660000, 900000, 1200000] },
+  album:       { label: "앨범·액자 추가",   group: "opt",   perPerson: false, base: [200000, 300000, 450000, 650000, 900000] },
+  etc:         { label: "기타",             group: "none",  perPerson: false, base: null }
 };
 
+// venue: 지역별 전체비용 비율(전국 2,139만 = 1.00 — 실측: 강남 3,466 / 강남외
+// 2,892 / 경기 1,909 / 충청 1,664 / 경상 1,284만). meal: 식대 지역차(강남 8.3만
+// vs 전국 6.2만 ≈ 1.34). sdm: 스드메 지역차(전라 345만 최고, 인천 212만 최저).
+// ★ 표시는 실측 기반, 나머지는 추정.
 const REGIONS = [
-  { id: "national",      label: "전국 평균",   venue: 1.00, sdm: 1.00 },
-  { id: "seoul_gangnam", label: "서울 강남권", venue: 1.62, sdm: 1.35 },
-  { id: "seoul_other",   label: "서울 강남 외", venue: 1.28, sdm: 1.15 },
-  { id: "gyeonggi",      label: "경기",        venue: 0.98, sdm: 0.95 },
-  { id: "incheon",       label: "인천",        venue: 0.92, sdm: 0.90 },
-  { id: "gangwon",       label: "강원",        venue: 0.75, sdm: 0.80 },
-  { id: "daejeon_sejong",label: "대전·세종",   venue: 0.85, sdm: 0.85 },
-  { id: "chungcheong",   label: "충청",        venue: 0.78, sdm: 0.80 },
-  { id: "gwangju",       label: "광주",        venue: 0.80, sdm: 0.82 },
-  { id: "jeolla",        label: "전라",        venue: 0.72, sdm: 0.78 },
-  { id: "daegu",         label: "대구",        venue: 0.82, sdm: 0.85 },
-  { id: "gyeongsang",    label: "경상",        venue: 0.68, sdm: 0.75 },
-  { id: "busan_ulsan",   label: "부산·울산",   venue: 0.88, sdm: 0.90 },
-  { id: "jeju",          label: "제주",        venue: 1.05, sdm: 0.95 }
+  { id: "national",      label: "전국 평균",    venue: 1.00, meal: 1.00, sdm: 1.00 }, // ★
+  { id: "seoul_gangnam", label: "서울 강남권",  venue: 1.62, meal: 1.34, sdm: 1.25 }, // ★venue·meal
+  { id: "seoul_other",   label: "서울 강남 외", venue: 1.35, meal: 1.15, sdm: 1.10 }, // ★venue
+  { id: "gyeonggi",      label: "경기",         venue: 0.89, meal: 0.95, sdm: 0.95 }, // ★venue
+  { id: "incheon",       label: "인천",         venue: 0.85, meal: 0.92, sdm: 0.72 }, // ★sdm
+  { id: "gangwon",       label: "강원",         venue: 0.75, meal: 0.88, sdm: 0.90 },
+  { id: "daejeon_sejong",label: "대전·세종",    venue: 0.85, meal: 0.90, sdm: 0.90 },
+  { id: "chungcheong",   label: "충청",         venue: 0.78, meal: 0.88, sdm: 0.90 }, // ★venue
+  { id: "gwangju",       label: "광주",         venue: 0.82, meal: 0.90, sdm: 0.95 },
+  { id: "jeolla",        label: "전라",         venue: 0.80, meal: 0.85, sdm: 1.17 }, // ★sdm
+  { id: "daegu",         label: "대구",         venue: 0.85, meal: 0.90, sdm: 0.95 },
+  { id: "gyeongsang",    label: "경상",         venue: 0.60, meal: 0.85, sdm: 0.85 }, // ★venue
+  { id: "busan_ulsan",   label: "부산·울산",    venue: 0.80, meal: 0.95, sdm: 1.05 },
+  { id: "jeju",          label: "제주",         venue: 1.00, meal: 1.05, sdm: 0.95 }
 ];
 
 // PRICE_DATA[regionId][itemKey] = [b10, b25, avg, t25, t10]  (원)
@@ -329,7 +344,7 @@ for (const r of REGIONS) {
   PRICE_DATA[r.id] = {};
   for (const [key, def] of Object.entries(ITEM_DEFS)) {
     if (!def.base) continue;
-    const mult = def.group === "venue" ? r.venue : def.group === "sdm" ? r.sdm : 1.0;
+    const mult = r[def.group] ?? 1.0;
     PRICE_DATA[r.id][key] = def.base.map(v => Math.round(v * mult / 1000) * 1000);
   }
 }
@@ -614,7 +629,7 @@ const EXTRACT_PROMPT = `이 이미지는 한국의 결혼서비스(예식장/스
 견적서의 가격 항목을 모두 추출해 주세요.
 
 규칙:
-- category는 항목 성격에 맞게 분류: hall_rental(대관료), meal(식대), decoration(꽃/장식), studio(스튜디오 촬영), dress(드레스 대여), makeup(메이크업), sdm_package(스드메 통합 패키지), helper(헬퍼비), originals(원본/수정본 파일 구입), dress_extra(드레스 추가 대여), album(앨범/액자), etc(그 외 모든 항목)
+- category는 항목 성격에 맞게 분류: hall_rental(대관료), meal(뷔페 식대), meal_course(코스 식대), meal_hansang(한상차림 식대), decoration(꽃/장식), studio(스튜디오 촬영), dress(드레스 대여), makeup(메이크업), sdm_package(스드메 통합 패키지), helper(헬퍼비), originals(원본/수정본 파일 구입), dress_extra(드레스 추가 대여), album(앨범/액자), etc(그 외 모든 항목). 식사 형태가 불명확한 식대는 meal로 분류.
 - amount는 원 단위 정수. "150만원" → 1500000
 - 식대는 1인 기준 금액이면 is_per_person을 true로 하고 1인 금액을 amount에 넣으세요. 총액만 있으면 is_per_person을 false로 두고 총액을 넣으세요. 식대 외 항목은 is_per_person을 false로 하세요.
 - 이름, 연락처, 날짜 등 개인정보는 추출하지 마세요.
@@ -669,7 +684,7 @@ $("#btn-ocr").addEventListener("click", async () => {
       name: it.name,
       amount: it.amount,
       // 식대인데 총액으로 적힌 경우: 1인 비교가 불가하므로 etc 처리
-      ...(it.category === "meal" && !it.is_per_person ? { category: "etc" } : {})
+      ...(it.category.startsWith("meal") && !it.is_per_person ? { category: "etc" } : {})
     }));
     if (!items.length) throw new Error("견적 항목을 찾지 못했습니다. 사진이 선명한지 확인해 주세요.");
     // 직접 입력 탭에 채워서 사용자가 확인·수정 후 진단
