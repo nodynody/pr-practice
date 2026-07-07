@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>웨딩체크 — 결혼 견적 진단</title>
+<style>
+:root {
+  --surface-1: #fcfcfb;
+  --page: #f9f9f7;
+  --ink-1: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --accent: #2a78d6;
+  --accent-strong: #1c5cab;
+  /* 밴드(가격 수준) 순차 램프 — 파랑 단일 색상, 검증 통과(250~650) */
+  --band-1: #86b6ef;
+  --band-2: #5598e7;
+  --band-3: #2a78d6;
+  --band-4: #1c5cab;
+  --band-5: #104281;
+  /* 상태 색 (아이콘+라벨과 항상 함께 사용) */
+  --status-good: #0ca30c;
+  --status-good-text: #006300;
+  --status-warning: #fab219;
+  --status-warning-text: #7a5600;
+  --status-serious: #ec835a;
+  --status-serious-text: #a03d16;
+  --status-critical: #d03b3b;
+  --status-critical-text: #a02020;
+  --chip-good-bg: rgba(12,163,12,0.10);
+  --chip-warning-bg: rgba(250,178,25,0.14);
+  --chip-serious-bg: rgba(236,131,90,0.14);
+  --chip-critical-bg: rgba(208,59,59,0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-1: #1a1a19;
+    --page: #0d0d0d;
+    --ink-1: #ffffff;
+    --ink-2: #c3c2b7;
+    --ink-muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255,255,255,0.10);
+    --accent: #3987e5;
+    --accent-strong: #86b6ef;
+    --band-1: #184f95;
+    --band-2: #256abf;
+    --band-3: #3987e5;
+    --band-4: #6da7ec;
+    --band-5: #9ec5f4;
+    --status-good-text: #0ca30c;
+    --status-warning-text: #fab219;
+    --status-serious-text: #ec835a;
+    --status-critical-text: #e66767;
+    --chip-good-bg: rgba(12,163,12,0.16);
+    --chip-warning-bg: rgba(250,178,25,0.16);
+    --chip-serious-bg: rgba(236,131,90,0.16);
+    --chip-critical-bg: rgba(208,59,59,0.18);
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink-1);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.55;
+}
+.wrap { max-width: 860px; margin: 0 auto; padding: 20px 16px 80px; }
+header.app { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+header.app h1 { font-size: 22px; margin: 0; }
+header.app h1 .logo-dot { color: var(--accent); }
+.subtitle { color: var(--ink-2); font-size: 14px; margin: 0 0 20px; }
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+.card h2 { font-size: 15px; margin: 0 0 12px; }
+.step-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 12px; font-weight: 700;
+  margin-right: 8px; vertical-align: -3px;
+}
+select, input[type=text], input[type=number] {
+  font: inherit; color: var(--ink-1);
+  background: var(--page);
+  border: 1px solid var(--baseline); border-radius: 8px;
+  padding: 8px 10px;
+}
+select:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.region-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.region-row select { min-width: 220px; }
+.hint { font-size: 12.5px; color: var(--ink-muted); margin-top: 8px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.tab {
+  font: inherit; font-size: 13.5px; padding: 7px 14px; cursor: pointer;
+  border: 1px solid var(--baseline); border-radius: 999px;
+  background: transparent; color: var(--ink-2);
+}
+.tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.tabpane { display: none; }
+.tabpane.active { display: block; }
+.drop {
+  border: 2px dashed var(--baseline); border-radius: 12px;
+  padding: 28px 16px; text-align: center; color: var(--ink-2); cursor: pointer;
+}
+.drop.dragover { border-color: var(--accent); color: var(--accent); }
+.drop input { display: none; }
+button.primary {
+  font: inherit; font-weight: 600; cursor: pointer;
+  background: var(--accent); color: #fff; border: none;
+  border-radius: 8px; padding: 10px 18px;
+}
+button.primary:disabled { opacity: .5; cursor: default; }
+button.ghost {
+  font: inherit; cursor: pointer; background: transparent;
+  color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 8px; padding: 8px 14px;
+}
+button.linklike { font: inherit; background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; text-decoration: underline; }
+.items-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.items-table th { text-align: left; color: var(--ink-muted); font-weight: 500; font-size: 12.5px; padding: 4px 6px; border-bottom: 1px solid var(--grid); }
+.items-table td { padding: 6px 6px; border-bottom: 1px solid var(--grid); }
+.items-table input[type=text] { width: 100%; }
+.items-table input.amt { width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
+.items-table select { width: 100%; min-width: 130px; }
+.row-del { background: none; border: none; color: var(--ink-muted); cursor: pointer; font-size: 16px; }
+.row-del:hover { color: var(--status-critical-text); }
+.actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+.spinner {
+  display: inline-block; width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,.4); border-top-color: #fff;
+  border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -3px; margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── 결과 ── */
+#results { display: none; }
+.summary-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 4px; }
+.tile { background: var(--page); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.tile .t-label { font-size: 12px; color: var(--ink-muted); }
+.tile .t-value { font-size: 22px; font-weight: 700; margin-top: 2px; }
+.tile .t-sub { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+.item-card { border: 1px solid var(--grid); border-radius: 10px; padding: 14px 16px; margin-top: 12px; background: var(--surface-1); }
+.item-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.item-name { font-weight: 600; font-size: 14.5px; }
+.item-cat { color: var(--ink-muted); font-size: 12px; margin-left: 6px; }
+.item-price { font-variant-numeric: tabular-nums; font-weight: 600; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 3px 10px;
+}
+.chip.good { color: var(--status-good-text); background: var(--chip-good-bg); }
+.chip.warning { color: var(--status-warning-text); background: var(--chip-warning-bg); }
+.chip.serious { color: var(--status-serious-text); background: var(--chip-serious-bg); }
+.chip.critical { color: var(--status-critical-text); background: var(--chip-critical-bg); }
+.chip.none { color: var(--ink-muted); background: var(--page); border: 1px solid var(--grid); }
+.delta { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+.delta b { font-variant-numeric: tabular-nums; }
+
+/* 밴드 게이지 */
+.gauge { margin-top: 12px; }
+.gauge-track { position: relative; display: flex; height: 14px; border-radius: 7px; overflow: visible; }
+.gauge-seg { flex: 1; }
+.gauge-seg + .gauge-seg { margin-left: 2px; } /* 2px 표면 간격 */
+.gauge-seg.s1 { background: var(--band-1); border-radius: 7px 0 0 7px; }
+.gauge-seg.s2 { background: var(--band-2); }
+.gauge-seg.s3 { background: var(--band-3); }
+.gauge-seg.s4 { background: var(--band-4); }
+.gauge-seg.s5 { background: var(--band-5); border-radius: 0 7px 7px 0; }
+.gauge-marker {
+  position: absolute; top: -5px; width: 4px; height: 24px; border-radius: 2px;
+  background: var(--ink-1); box-shadow: 0 0 0 2px var(--surface-1);
+  transform: translateX(-50%);
+}
+.gauge-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-muted); margin-top: 6px; }
+.gauge-values { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.disclaimer { font-size: 12px; color: var(--ink-muted); border-top: 1px solid var(--grid); margin-top: 22px; padding-top: 12px; }
+.disclaimer p { margin: 4px 0; }
+
+/* 설정 모달 */
+dialog {
+  border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+  background: var(--surface-1); color: var(--ink-1); max-width: 440px; width: calc(100% - 40px);
+}
+dialog::backdrop { background: rgba(0,0,0,.45); }
+dialog h3 { margin: 0 0 10px; font-size: 16px; }
+dialog p { font-size: 13px; color: var(--ink-2); }
+dialog input[type=password], dialog input[type=text] { width: 100%; margin: 8px 0; font-family: monospace; }
+.err { color: var(--status-critical-text); font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="app">
+    <h1>웨딩체크<span class="logo-dot">.</span></h1>
+    <button class="ghost" id="btn-settings" style="font-size:13px">⚙ API 키 설정</button>
+  </header>
+  <p class="subtitle">받아온 결혼 견적서, 우리 지역 시세와 비교해 항목별로 진단해 드립니다.<br>
+  기준: 한국소비자원 참가격 결혼서비스 가격 구간(상위10% · 상위25% · 평균 · 하위25% · 하위10%) 구조</p>
+
+  <!-- STEP 1: 지역 -->
+  <section class="card">
+    <h2><span class="step-num">1</span>예식 지역 선택</h2>
+    <div class="region-row">
+      <select id="region"></select>
+      <span class="hint" style="margin-top:0">지역별 가격 구간이 달라 진단 결과가 달라집니다.</span>
+    </div>
+  </section>
+
+  <!-- STEP 2: 견적 입력 -->
+  <section class="card">
+    <h2><span class="step-num">2</span>견적서 입력</h2>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-pane="pane-photo">📷 사진으로 분석</button>
+      <button class="tab" role="tab" aria-selected="false" data-pane="pane-manual">✏️ 직접 입력</button>
+      <button class="tab" role="tab" aria-selected="false" data-pane="pane-sample">✨ 샘플로 체험</button>
+    </div>
+
+    <div class="tabpane active" id="pane-photo">
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept="image/*">
+        <div id="drop-label">견적서 사진을 끌어다 놓거나 <b>클릭해서 선택</b>하세요<br>
+        <span class="hint">AI(Claude)가 항목과 금액을 자동으로 읽어냅니다 · API 키 필요</span></div>
+      </label>
+      <div class="actions">
+        <button class="primary" id="btn-ocr" disabled>사진 분석하기</button>
+        <span class="hint" style="margin-top:0" id="ocr-status"></span>
+      </div>
+      <div class="err" id="ocr-err"></div>
+      <p class="hint">사진은 이 브라우저에서 Anthropic API로만 전송되며, 이 사이트 서버에 저장되지 않습니다. 분석 후 이름·연락처 등 개인정보는 사용하지 않습니다.</p>
+    </div>
+
+    <div class="tabpane" id="pane-manual">
+      <table class="items-table" id="items-table">
+        <thead><tr><th>분류</th><th>항목명</th><th style="text-align:right">금액(원)</th><th></th></tr></thead>
+        <tbody id="items-body"></tbody>
+      </table>
+      <div class="actions">
+        <button class="ghost" id="btn-add-row">+ 항목 추가</button>
+        <button class="primary" id="btn-diagnose">진단하기</button>
+      </div>
+      <p class="hint">식대는 <b>1인 기준 금액</b>으로 입력하세요. 나머지는 견적서의 항목 합계 금액을 입력합니다.</p>
+    </div>
+
+    <div class="tabpane" id="pane-sample">
+      <p style="font-size:14px; color:var(--ink-2)">서울 강남권 예식장에서 받은 가상의 견적서로 진단 과정을 미리 볼 수 있습니다.</p>
+      <button class="primary" id="btn-sample">샘플 견적으로 진단해 보기</button>
+    </div>
+  </section>
+
+  <!-- STEP 3: 결과 -->
+  <section class="card" id="results">
+    <h2><span class="step-num">3</span>진단 결과 <span id="result-region" style="color:var(--ink-muted); font-weight:400; font-size:13px"></span></h2>
+    <div class="summary-tiles" id="summary-tiles"></div>
+    <div id="item-cards"></div>
+    <div class="disclaimer">
+      <p>ⓘ 본 진단은 한국소비자원 참가격의 결혼서비스 가격 공개 구조(지역별 상위10%·상위25%·평균·하위25%·하위10%)를 기준으로 한 <b>참고 정보</b>이며, 특정 업체에 대한 평가가 아닙니다.</p>
+      <p>ⓘ 현재 내장된 가격 구간은 <b>공개 통계를 바탕으로 한 샘플 추정치</b>입니다. 참가격(price.go.kr) 최신 공표 값으로 교체해 사용하세요. (파일 내 <code>PRICE_DATA</code>)</p>
+      <p>ⓘ 실제 계약 시에는 옵션 구성·보증 인원·시즌 등 조건에 따라 적정 가격이 달라질 수 있습니다.</p>
+    </div>
+  </section>
+</div>
+
+<!-- API 키 설정 -->
+<dialog id="dlg-settings">
+  <h3>Anthropic API 키 설정</h3>
+  <p>사진 분석(OCR)에는 Claude API가 사용됩니다. 키는 이 브라우저의 localStorage에만 저장되며 외부로 전송되지 않습니다(Anthropic API 호출 제외).
+  키 발급: <b>platform.claude.com</b> → API Keys</p>
+  <input type="password" id="api-key" placeholder="sk-ant-...">
+  <div class="actions">
+    <button class="primary" id="btn-save-key">저장</button>
+    <button class="ghost" id="btn-close-settings">닫기</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+
+/* ═══════════════════════════════════════════════════════════════
+   가격 데이터 (샘플 추정치 — 참가격 price.go.kr 공표값으로 교체)
+   각 항목: [하위10%, 하위25%, 평균, 상위25%, 상위10%] 가격(원)
+   지역 배수: venue(예식장 관련) / sdm(스드메 관련)
+   ═══════════════════════════════════════════════════════════════ */
+const ITEM_DEFS = {
+  hall_rental: { label: "대관료",        group: "venue", perPerson: false, base: [1000000, 2500000, 4800000, 7500000, 11000000] },
+  meal:        { label: "식대(1인)",     group: "venue", perPerson: true,  base: [38000, 46000, 58000, 72000, 88000] },
+  decoration:  { label: "기본 장식(꽃)", group: "venue", perPerson: false, base: [600000, 1000000, 1600000, 2300000, 3200000] },
+  studio:      { label: "스튜디오 촬영", group: "sdm",   perPerson: false, base: [600000, 850000, 1170000, 1500000, 1950000] },
+  dress:       { label: "드레스 대여",   group: "sdm",   perPerson: false, base: [800000, 1150000, 1600000, 2100000, 2800000] },
+  makeup:      { label: "메이크업",      group: "sdm",   perPerson: false, base: [350000, 500000, 720000, 950000, 1250000] },
+  sdm_package: { label: "스드메 패키지", group: "sdm",   perPerson: false, base: [2000000, 2700000, 3500000, 4500000, 5800000] },
+  helper:      { label: "헬퍼비",        group: "opt",   perPerson: false, base: [150000, 200000, 250000, 300000, 380000] },
+  originals:   { label: "원본·수정본 구입", group: "opt", perPerson: false, base: [150000, 220000, 330000, 450000, 600000] },
+  dress_extra: { label: "드레스 추가 대여", group: "opt", perPerson: false, base: [300000, 450000, 660000, 900000, 1200000] },
+  album:       { label: "앨범·액자 추가",  group: "opt",  perPerson: false, base: [200000, 300000, 450000, 650000, 900000] },
+  etc:         { label: "기타",          group: "none",  perPerson: false, base: null }
+};
+
+const REGIONS = [
+  { id: "national",      label: "전국 평균",   venue: 1.00, sdm: 1.00 },
+  { id: "seoul_gangnam", label: "서울 강남권", venue: 1.62, sdm: 1.35 },
+  { id: "seoul_other",   label: "서울 강남 외", venue: 1.28, sdm: 1.15 },
+  { id: "gyeonggi",      label: "경기",        venue: 0.98, sdm: 0.95 },
+  { id: "incheon",       label: "인천",        venue: 0.92, sdm: 0.90 },
+  { id: "gangwon",       label: "강원",        venue: 0.75, sdm: 0.80 },
+  { id: "daejeon_sejong",label: "대전·세종",   venue: 0.85, sdm: 0.85 },
+  { id: "chungcheong",   label: "충청",        venue: 0.78, sdm: 0.80 },
+  { id: "gwangju",       label: "광주",        venue: 0.80, sdm: 0.82 },
+  { id: "jeolla",        label: "전라",        venue: 0.72, sdm: 0.78 },
+  { id: "daegu",         label: "대구",        venue: 0.82, sdm: 0.85 },
+  { id: "gyeongsang",    label: "경상",        venue: 0.68, sdm: 0.75 },
+  { id: "busan_ulsan",   label: "부산·울산",   venue: 0.88, sdm: 0.90 },
+  { id: "jeju",          label: "제주",        venue: 1.05, sdm: 0.95 }
+];
+
+// PRICE_DATA[regionId][itemKey] = [b10, b25, avg, t25, t10]  (원)
+const PRICE_DATA = {};
+for (const r of REGIONS) {
+  PRICE_DATA[r.id] = {};
+  for (const [key, def] of Object.entries(ITEM_DEFS)) {
+    if (!def.base) continue;
+    const mult = def.group === "venue" ? r.venue : def.group === "sdm" ? r.sdm : 1.0;
+    PRICE_DATA[r.id][key] = def.base.map(v => Math.round(v * mult / 1000) * 1000);
+  }
+}
+
+/* ═══════════════ 진단 엔진 ═══════════════ */
+const BAND_LABELS = ["하위 10%", "하위 25%", "평균", "상위 25%", "상위 10%"];
+
+const VERDICTS = {
+  very_low:  { band: "하위 10% 이내",   verdict: "매우 저렴",   status: "good",     icon: "▼" },
+  low:       { band: "하위 10~25%",     verdict: "저렴한 편",   status: "good",     icon: "▼" },
+  fair:      { band: "하위 25%~평균",   verdict: "합리적",      status: "good",     icon: "●" },
+  above:     { band: "평균~상위 25%",   verdict: "평균보다 높음", status: "warning", icon: "▲" },
+  high:      { band: "상위 10~25%",     verdict: "비싼 편",     status: "serious",  icon: "▲" },
+  very_high: { band: "상위 10% 이내",   verdict: "매우 비쌈",   status: "critical", icon: "▲" }
+};
+
+function classify(value, stats) {
+  // stats: [b10, b25, avg, t25, t10]
+  const [b10, b25, avg, t25, t10] = stats;
+  let key;
+  if (value >= t10) key = "very_high";
+  else if (value >= t25) key = "high";
+  else if (value > avg) key = "above";
+  else if (value > b25) key = "fair";
+  else if (value > b10) key = "low";
+  else key = "very_low";
+  const deltaPct = (value - avg) / avg * 100;
+  // 게이지 위치: 4개 구간(경계 5개)을 등폭으로 놓고 구간 내 선형 보간, 범위 밖은 가장자리로
+  let pos;
+  if (value <= b10) pos = 0.02;
+  else if (value >= t10) pos = 0.98;
+  else {
+    const bounds = [b10, b25, avg, t25, t10];
+    for (let i = 0; i < 4; i++) {
+      if (value <= bounds[i + 1]) {
+        pos = (i + (value - bounds[i]) / (bounds[i + 1] - bounds[i])) / 4;
+        break;
+      }
+    }
+  }
+  return { key, ...VERDICTS[key], deltaPct, pos };
+}
+
+/* ═══════════════ 포맷 유틸 ═══════════════ */
+function fmtWon(v) {
+  if (v >= 10000000) {
+    const man = Math.round(v / 10000);
+    const chun = Math.floor(man / 1000);
+    const rest = man % 1000;
+    return rest ? `${chun},${String(rest).padStart(3, "0")}만원` : `${chun},000만원`;
+  }
+  if (v >= 10000 && v % 10000 === 0) return `${(v / 10000).toLocaleString()}만원`;
+  if (v >= 10000) return `${(v / 10000).toLocaleString(undefined, { maximumFractionDigits: 1 })}만원`;
+  return `${v.toLocaleString()}원`;
+}
+function fmtShort(v) {
+  if (v >= 10000) return `${Math.round(v / 10000).toLocaleString()}만`;
+  return `${(v / 10000).toFixed(1)}만`;
+}
+
+/* ═══════════════ UI: 지역/탭 ═══════════════ */
+const $ = s => document.querySelector(s);
+const regionSel = $("#region");
+for (const r of REGIONS) {
+  const o = document.createElement("option");
+  o.value = r.id; o.textContent = r.label;
+  regionSel.appendChild(o);
+}
+
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", "false"));
+    document.querySelectorAll(".tabpane").forEach(p => p.classList.remove("active"));
+    tab.setAttribute("aria-selected", "true");
+    $("#" + tab.dataset.pane).classList.add("active");
+  });
+});
+
+/* ═══════════════ 직접 입력 테이블 ═══════════════ */
+const itemsBody = $("#items-body");
+function catOptions(selected) {
+  return Object.entries(ITEM_DEFS)
+    .map(([k, d]) => `<option value="${k}" ${k === selected ? "selected" : ""}>${d.label}</option>`)
+    .join("");
+}
+function addRow(cat = "hall_rental", name = "", amount = "") {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><select class="row-cat">${catOptions(cat)}</select></td>
+    <td><input type="text" class="row-name" placeholder="예: 홀 대관료" value="${name}"></td>
+    <td><input type="text" class="amt row-amt" inputmode="numeric" placeholder="0" value="${amount ? Number(amount).toLocaleString() : ""}"></td>
+    <td><button class="row-del" title="삭제">✕</button></td>`;
+  tr.querySelector(".row-del").addEventListener("click", () => tr.remove());
+  const amt = tr.querySelector(".row-amt");
+  amt.addEventListener("input", () => {
+    const raw = amt.value.replace(/[^\d]/g, "");
+    amt.value = raw ? Number(raw).toLocaleString() : "";
+  });
+  itemsBody.appendChild(tr);
+}
+["hall_rental", "meal", "sdm_package"].forEach(c => addRow(c));
+$("#btn-add-row").addEventListener("click", () => addRow("etc"));
+
+function readManualItems() {
+  const items = [];
+  for (const tr of itemsBody.querySelectorAll("tr")) {
+    const cat = tr.querySelector(".row-cat").value;
+    const name = tr.querySelector(".row-name").value.trim();
+    const amount = Number(tr.querySelector(".row-amt").value.replace(/[^\d]/g, ""));
+    if (amount > 0) items.push({ category: cat, name: name || ITEM_DEFS[cat].label, amount });
+  }
+  return items;
+}
+$("#btn-diagnose").addEventListener("click", () => {
+  const items = readManualItems();
+  if (!items.length) { alert("금액이 입력된 항목이 없습니다."); return; }
+  renderResults(items);
+});
+
+/* ═══════════════ 샘플 체험 ═══════════════ */
+const SAMPLE_ITEMS = [
+  { category: "hall_rental", name: "그랜드홀 대관료", amount: 12000000 },
+  { category: "meal",        name: "뷔페 식대(1인)",  amount: 105000 },
+  { category: "decoration",  name: "생화 장식",       amount: 2600000 },
+  { category: "studio",      name: "스튜디오 촬영",   amount: 1550000 },
+  { category: "dress",       name: "드레스 대여(2벌)", amount: 2400000 },
+  { category: "makeup",      name: "신부 메이크업",   amount: 850000 },
+  { category: "helper",      name: "헬퍼비",          amount: 300000 },
+  { category: "originals",   name: "원본 파일 구입",  amount: 550000 }
+];
+$("#btn-sample").addEventListener("click", () => {
+  regionSel.value = "seoul_gangnam";
+  renderResults(SAMPLE_ITEMS);
+});
+
+/* ═══════════════ 결과 렌더링 ═══════════════ */
+function renderResults(items) {
+  const regionId = regionSel.value;
+  const region = REGIONS.find(r => r.id === regionId);
+  const stats = PRICE_DATA[regionId];
+
+  const diagnosed = items.map(it => {
+    const s = stats[it.category];
+    return { ...it, def: ITEM_DEFS[it.category], stats: s || null, result: s ? classify(it.amount, s) : null };
+  });
+
+  // 요약 타일
+  const total = diagnosed.reduce((sum, d) => sum + (d.def.perPerson ? 0 : d.amount), 0);
+  const perPersonNote = diagnosed.some(d => d.def.perPerson);
+  const comparable = diagnosed.filter(d => d.result);
+  const nGood = comparable.filter(d => d.result.status === "good").length;
+  const nWarn = comparable.filter(d => d.result.status === "warning").length;
+  const nHigh = comparable.filter(d => d.result.status === "serious" || d.result.status === "critical").length;
+  const avgSum = comparable.filter(d => !d.def.perPerson).reduce((s, d) => s + d.stats[2], 0);
+  const mySum = comparable.filter(d => !d.def.perPerson).reduce((s, d) => s + d.amount, 0);
+  const totalDelta = avgSum > 0 ? (mySum - avgSum) / avgSum * 100 : null;
+
+  $("#summary-tiles").innerHTML = `
+    <div class="tile">
+      <div class="t-label">견적 합계${perPersonNote ? " (1인 식대 제외)" : ""}</div>
+      <div class="t-value">${fmtWon(total)}</div>
+      ${totalDelta !== null ? `<div class="t-sub">같은 구성 지역 평균 대비 <b>${totalDelta >= 0 ? "+" : ""}${totalDelta.toFixed(0)}%</b></div>` : ""}
+    </div>
+    <div class="tile">
+      <div class="t-label">합리적 항목</div>
+      <div class="t-value" style="color:var(--status-good-text)">${nGood}개</div>
+    </div>
+    <div class="tile">
+      <div class="t-label">평균 상회</div>
+      <div class="t-value" style="color:var(--status-warning-text)">${nWarn}개</div>
+    </div>
+    <div class="tile">
+      <div class="t-label">비싼 항목</div>
+      <div class="t-value" style="color:var(--status-critical-text)">${nHigh}개</div>
+    </div>`;
+
+  // 항목 카드
+  $("#item-cards").innerHTML = diagnosed.map(d => {
+    const head = `
+      <div class="item-head">
+        <div><span class="item-name">${escapeHtml(d.name)}</span><span class="item-cat">${d.def.label}${d.def.perPerson ? " · 1인 기준" : ""}</span></div>
+        <div class="item-price">${fmtWon(d.amount)}</div>
+      </div>`;
+    if (!d.result) {
+      return `<div class="item-card">${head}
+        <div style="margin-top:8px"><span class="chip none">— 비교 데이터 없음</span>
+        <span class="hint" style="margin-left:8px">참가격 공개 항목이 아니어서 진단에서 제외했습니다.</span></div></div>`;
+    }
+    const r = d.result;
+    const deltaTxt = `${r.deltaPct >= 0 ? "+" : ""}${r.deltaPct.toFixed(0)}%`;
+    return `<div class="item-card">
+      ${head}
+      <div style="margin-top:8px; display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+        <span class="chip ${r.status}">${r.icon} ${r.verdict} · ${r.band}</span>
+        <span class="delta">지역 평균(${fmtWon(d.stats[2])}) 대비 <b>${deltaTxt}</b></span>
+      </div>
+      <div class="gauge">
+        <div class="gauge-track">
+          <div class="gauge-seg s1"></div><div class="gauge-seg s2"></div><div class="gauge-seg s3"></div><div class="gauge-seg s4"></div><div class="gauge-seg s5"></div>
+          <div class="gauge-marker" style="left:${(r.pos * 100).toFixed(1)}%"></div>
+        </div>
+        <div class="gauge-values"><span>${fmtShort(d.stats[0])}</span><span>${fmtShort(d.stats[1])}</span><span>${fmtShort(d.stats[2])}</span><span>${fmtShort(d.stats[3])}</span><span>${fmtShort(d.stats[4])}</span></div>
+        <div class="gauge-labels"><span>하위10%</span><span>하위25%</span><span>평균</span><span>상위25%</span><span>상위10%</span></div>
+      </div>
+    </div>`;
+  }).join("");
+
+  $("#result-region").textContent = `— ${region.label} 기준`;
+  $("#results").style.display = "block";
+  $("#results").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/* ═══════════════ 사진 분석 (Claude API) ═══════════════ */
+const KEY_STORAGE = "weddingcheck_api_key";
+let selectedFile = null;
+
+const drop = $("#drop");
+const fileInput = $("#file");
+drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("dragover"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
+drop.addEventListener("drop", e => {
+  e.preventDefault(); drop.classList.remove("dragover");
+  if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+function setFile(f) {
+  selectedFile = f;
+  $("#drop-label").innerHTML = `📄 <b>${escapeHtml(f.name)}</b> 선택됨 <span class="hint">(다른 파일을 선택하려면 다시 클릭)</span>`;
+  $("#btn-ocr").disabled = false;
+}
+
+// 이미지 리사이즈(긴 변 2000px) + JPEG 변환 → base64
+function imageToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const maxEdge = 2000;
+      let { width, height } = img;
+      const scale = Math.min(1, maxEdge / Math.max(width, height));
+      width = Math.round(width * scale); height = Math.round(height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      resolve(dataUrl.split(",")[1]);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("이미지를 읽을 수 없습니다.")); };
+    img.src = url;
+  });
+}
+
+const EXTRACT_SCHEMA = {
+  type: "object",
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          category: { type: "string", enum: Object.keys(ITEM_DEFS) },
+          name: { type: "string" },
+          amount: { type: "integer" },
+          is_per_person: { type: "boolean" }
+        },
+        required: ["category", "name", "amount", "is_per_person"],
+        additionalProperties: false
+      }
+    },
+    vendor_type: { type: "string", enum: ["예식장", "스드메", "웨딩플래너", "기타"] }
+  },
+  required: ["items", "vendor_type"],
+  additionalProperties: false
+};
+
+const EXTRACT_PROMPT = `이 이미지는 한국의 결혼서비스(예식장/스튜디오/드레스/메이크업 등) 견적서입니다.
+견적서의 가격 항목을 모두 추출해 주세요.
+
+규칙:
+- category는 항목 성격에 맞게 분류: hall_rental(대관료), meal(식대), decoration(꽃/장식), studio(스튜디오 촬영), dress(드레스 대여), makeup(메이크업), sdm_package(스드메 통합 패키지), helper(헬퍼비), originals(원본/수정본 파일 구입), dress_extra(드레스 추가 대여), album(앨범/액자), etc(그 외 모든 항목)
+- amount는 원 단위 정수. "150만원" → 1500000
+- 식대는 1인 기준 금액이면 is_per_person을 true로 하고 1인 금액을 amount에 넣으세요. 총액만 있으면 is_per_person을 false로 두고 총액을 넣으세요. 식대 외 항목은 is_per_person을 false로 하세요.
+- 이름, 연락처, 날짜 등 개인정보는 추출하지 마세요.
+- 합계/총계 행은 items에 포함하지 마세요.`;
+
+$("#btn-ocr").addEventListener("click", async () => {
+  const key = localStorage.getItem(KEY_STORAGE);
+  if (!key) { openSettings(); return; }
+  if (!selectedFile) return;
+  const btn = $("#btn-ocr");
+  const status = $("#ocr-status");
+  $("#ocr-err").textContent = "";
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span>분석 중…`;
+  try {
+    status.textContent = "이미지 준비 중…";
+    const b64 = await imageToBase64(selectedFile);
+    status.textContent = "AI가 견적서를 읽는 중… (10~30초)";
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({
+        model: "claude-opus-4-8",
+        max_tokens: 8192,
+        output_config: { format: { type: "json_schema", schema: EXTRACT_SCHEMA } },
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } },
+            { type: "text", text: EXTRACT_PROMPT }
+          ]
+        }]
+      })
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => null);
+      const msg = errBody?.error?.message || `HTTP ${res.status}`;
+      throw new Error(res.status === 401 ? "API 키가 올바르지 않습니다. ⚙ 설정에서 다시 입력해 주세요." : msg);
+    }
+    const data = await res.json();
+    if (data.stop_reason === "refusal") throw new Error("AI가 이 이미지 분석을 거절했습니다. 다른 사진으로 시도해 주세요.");
+    const textBlock = data.content.find(b => b.type === "text");
+    if (!textBlock) throw new Error("분석 결과가 비어 있습니다.");
+    const parsed = JSON.parse(textBlock.text);
+    const items = (parsed.items || []).filter(it => it.amount > 0).map(it => ({
+      category: ITEM_DEFS[it.category] ? it.category : "etc",
+      name: it.name,
+      amount: it.amount,
+      // 식대인데 총액으로 적힌 경우: 1인 비교가 불가하므로 etc 처리
+      ...(it.category === "meal" && !it.is_per_person ? { category: "etc" } : {})
+    }));
+    if (!items.length) throw new Error("견적 항목을 찾지 못했습니다. 사진이 선명한지 확인해 주세요.");
+    // 직접 입력 탭에 채워서 사용자가 확인·수정 후 진단
+    itemsBody.innerHTML = "";
+    items.forEach(it => addRow(it.category, it.name, it.amount));
+    document.querySelector('[data-pane="pane-manual"]').click();
+    status.textContent = `${items.length}개 항목을 읽었습니다. 확인 후 [진단하기]를 눌러 주세요.`;
+  } catch (e) {
+    $("#ocr-err").textContent = "⚠ " + e.message;
+    status.textContent = "";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "사진 분석하기";
+  }
+});
+
+/* ═══════════════ 설정 ═══════════════ */
+const dlg = $("#dlg-settings");
+function openSettings() {
+  $("#api-key").value = localStorage.getItem(KEY_STORAGE) || "";
+  dlg.showModal();
+}
+$("#btn-settings").addEventListener("click", openSettings);
+$("#btn-save-key").addEventListener("click", () => {
+  const v = $("#api-key").value.trim();
+  if (v) localStorage.setItem(KEY_STORAGE, v);
+  else localStorage.removeItem(KEY_STORAGE);
+  dlg.close();
+});
+$("#btn-close-settings").addEventListener("click", () => dlg.close());
+</script>
+</body>
+</html>
